@@ -1,0 +1,465 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Window x:Class="ProxyHub.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:ProxyHub"
+        Title="Proxy Hub"
+        Height="760" Width="1180"
+        MinHeight="640" MinWidth="980"
+        Icon="pack://application:,,,/Assets/app.ico"
+        Background="{StaticResource BgBrush}"
+        Foreground="{StaticResource TextBrush}"
+        FontFamily="Segoe UI"
+        FontSize="13"
+        Loaded="Window_Loaded"
+        Closing="Window_Closing"
+        StateChanged="Window_StateChanged">
+    <Window.Resources>
+        <local:LogLevelBrushConverter x:Key="LogBrush"/>
+
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        </Style>
+
+        <Style x:Key="Muted" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+
+        <Style x:Key="Label" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource PanelBrush}"/>
+            <Setter Property="BorderBrush" Value="#2A3A52"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="16"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="#0E1624"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="BorderBrush" Value="#2A3A52"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,7"/>
+            <Setter Property="CaretBrush" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Height" Value="34"/>
+        </Style>
+
+        <Style TargetType="PasswordBox">
+            <Setter Property="Background" Value="#0E1624"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="BorderBrush" Value="#2A3A52"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,7"/>
+            <Setter Property="CaretBrush" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Height" Value="34"/>
+        </Style>
+
+        <ControlTemplate x:Key="ComboBoxToggleButton" TargetType="ToggleButton">
+            <Border x:Name="Chrome"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="28"/>
+                    </Grid.ColumnDefinitions>
+                    <Path Grid.Column="1"
+                          Fill="{StaticResource MutedBrush}"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Data="M 0,0 L 8,0 L 4,5 Z"/>
+                </Grid>
+            </Border>
+        </ControlTemplate>
+
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1C4F86"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsSelected" Value="True"/>
+                                    <Condition Property="IsHighlighted" Value="False"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Bd" Property="Background" Value="#223044"/>
+                            </MultiTrigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="Background" Value="#0E1624"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="BorderBrush" Value="#2A3A52"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="ToggleButton"
+                                          Background="{TemplateBinding Background}"
+                                          BorderBrush="{TemplateBinding BorderBrush}"
+                                          Template="{StaticResource ComboBoxToggleButton}"
+                                          Focusable="False"
+                                          ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"/>
+                            <ContentPresenter x:Name="ContentSite"
+                                              IsHitTestVisible="False"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
+                                              Margin="10,0,32,0"
+                                              VerticalAlignment="Center"
+                                              HorizontalAlignment="Left"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"/>
+                            <Popup x:Name="Popup"
+                                   Placement="Bottom"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   PopupAnimation="Slide">
+                                <Border SnapsToDevicePixels="True"
+                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                        MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                        Background="#121A2A"
+                                        BorderBrush="#2A3A52"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="4"
+                                        Margin="0,4,0,0">
+                                    <ScrollViewer SnapsToDevicePixels="True">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="BorderBrush" Value="#4BA3F5"/>
+                            </Trigger>
+                            <Trigger Property="IsDropDownOpen" Value="True">
+                                <Setter Property="BorderBrush" Value="#4BA3F5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="Margin" Value="0,6,0,0"/>
+        </Style>
+
+        <Style TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
+        </Style>
+
+        <Style x:Key="PrimaryBtn" TargetType="Button">
+            <Setter Property="Background" Value="#1C4F86"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#2763A8"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.5"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="GhostBtn" TargetType="Button" BasedOn="{StaticResource PrimaryBtn}">
+            <Setter Property="Background" Value="#223044"/>
+        </Style>
+
+        <Style x:Key="DangerBtn" TargetType="Button" BasedOn="{StaticResource PrimaryBtn}">
+            <Setter Property="Background" Value="#6B2434"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="64"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="40"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="#0E1626" BorderBrush="#2A3A52" BorderThickness="0,0,0,1">
+            <Grid Margin="18,0">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Image Width="40" Height="40" Margin="0,0,12,0"
+                           Source="pack://application:,,,/Assets/logo-mark.png"
+                           RenderOptions.BitmapScalingMode="HighQuality"
+                           SnapsToDevicePixels="True"/>
+                    <StackPanel>
+                        <TextBlock Text="Proxy Hub" FontSize="16" FontWeight="SemiBold"/>
+                        <TextBlock Text="Amnezia · PS5 · ПК · обход .ru / .рф" Style="{StaticResource Muted}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <Border x:Name="PillHub" Style="{StaticResource Card}" Margin="0,0,8,0" Padding="12,8" CornerRadius="16">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse x:Name="DotHub" Width="8" Height="8" Fill="#F0617D" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="LblHub" Text="Хаб выключен"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}" Margin="0,0,8,0" Padding="12,8" CornerRadius="16">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse x:Name="DotPc" Width="8" Height="8" Fill="#F0617D" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="LblPc" Text="ПК напрямую"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}" Margin="0" Padding="12,8" CornerRadius="16">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse x:Name="DotUp" Width="8" Height="8" Fill="#F0B429" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="LblUp" Text="Прокси не задан"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="380"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="Прокси Amnezia" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                            <TextBlock Text="SOCKS5 из приложения Amnezia или HTTP, если ставили отдельно."
+                                       Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                            <TextBlock Text="Тип" Style="{StaticResource Label}"/>
+                            <ComboBox x:Name="CmbType" Margin="0,0,0,10">
+                                <ComboBoxItem Content="SOCKS5" IsSelected="True"/>
+                                <ComboBoxItem Content="HTTP"/>
+                            </ComboBox>
+
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="110"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Сервер" Style="{StaticResource Label}"/>
+                                    <TextBox x:Name="TxtHost" ToolTip="IP VPS Amnezia Hosting"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Порт" Style="{StaticResource Label}"/>
+                                    <TextBox x:Name="TxtPort"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Логин" Style="{StaticResource Label}"/>
+                                    <TextBox x:Name="TxtUser"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Пароль" Style="{StaticResource Label}"/>
+                                    <PasswordBox x:Name="TxtPass"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" Content="Применить" Style="{StaticResource GhostBtn}" Click="BtnApply_Click"/>
+                                <Button Grid.Column="2" Content="Проверить" Style="{StaticResource PrimaryBtn}" Click="BtnTest_Click"/>
+                            </Grid>
+                            <TextBlock x:Name="LblTest" Style="{StaticResource Muted}" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="Этот компьютер" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                            <TextBlock Text="Windows идёт через локальный хаб: обход .ru и логи. Приставка сюда не подключается."
+                                       Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                            <Button x:Name="BtnPc" Content="Включить на этом ПК" Style="{StaticResource PrimaryBtn}" Click="BtnPc_Click"/>
+
+                            <CheckBox x:Name="ChkAutoHub" Content="Запускать хаб вместе с программой" Checked="ChkOptions_Changed" Unchecked="ChkOptions_Changed"/>
+                            <CheckBox x:Name="ChkTray" Content="Сворачивать в трей вместо закрытия" Checked="ChkOptions_Changed" Unchecked="ChkOptions_Changed"/>
+                            <CheckBox x:Name="ChkStartup" Content="Запускать вместе с Windows" Checked="ChkOptions_Changed" Unchecked="ChkOptions_Changed"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Background="#152033">
+                        <StackPanel>
+                            <TextBlock Text="PlayStation 5" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                            <TextBlock TextWrapping="Wrap" Style="{StaticResource Muted}" Margin="0,0,0,10"
+                                       Text="Кабель это та же домашняя сеть, что и Wi‑Fi: для Squid на VPS оба выходят с одного IP. Логин на приставке не заполняйте."/>
+                            <RadioButton x:Name="RadPs5Direct" GroupName="Ps5Route"
+                                         Content="Напрямую на Squid (не через этот ПК)"
+                                         IsChecked="True"
+                                         Checked="ChkOptions_Changed"/>
+                            <RadioButton x:Name="RadPs5Hub" GroupName="Ps5Route"
+                                         Content="Через этот ПК — если нужен обход .ru в хабе"
+                                         Checked="ChkOptions_Changed"/>
+                            <TextBlock x:Name="LblPs5" FontFamily="Cascadia Mono, Consolas" FontSize="13"
+                                       Margin="0,10,0,0"
+                                       Text="Адрес: —&#x0a;Порт:  3128"/>
+                            <Button Content="Скопировать адрес для PS5" Style="{StaticResource GhostBtn}"
+                                    Margin="0,12,0,0" Click="BtnCopyPs5_Click"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <Border Grid.Column="2" Style="{StaticResource Card}" Margin="0" Padding="0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Margin="16,14,16,8">
+                        <TextBlock Text="Логи" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="Очистить" Style="{StaticResource GhostBtn}" Height="32" Click="BtnClearLogs_Click" Margin="0,0,8,0"/>
+                            <Button Content="Папка логов" Style="{StaticResource GhostBtn}" Height="32" Click="BtnOpenLogs_Click"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <TabControl Grid.Row="1" Background="Transparent" BorderThickness="0" Margin="8,0,8,8">
+                        <TabControl.Resources>
+                            <Style TargetType="TabItem">
+                                <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="TabItem">
+                                            <Border x:Name="Bd" Padding="12,8" CornerRadius="8" Margin="0,0,6,8">
+                                                <ContentPresenter ContentSource="Header"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#223044"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </TabControl.Resources>
+
+                        <TabItem Header="Все">
+                            <ListBox x:Name="LstAll"
+                                     Background="#0A101A"
+                                     BorderBrush="#2A3A52"
+                                     BorderThickness="1"
+                                     FontFamily="Cascadia Mono, Consolas"
+                                     FontSize="12"
+                                     VirtualizingPanel.IsVirtualizing="True"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Display}" Foreground="{Binding Level, Converter={StaticResource LogBrush}}" Margin="4,1"/>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </TabItem>
+                        <TabItem Header="Ошибки">
+                            <ListBox x:Name="LstErrors"
+                                     Background="#0A101A"
+                                     BorderBrush="#2A3A52"
+                                     BorderThickness="1"
+                                     FontFamily="Cascadia Mono, Consolas"
+                                     FontSize="12"
+                                     VirtualizingPanel.IsVirtualizing="True">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Display}" Foreground="{Binding Level, Converter={StaticResource LogBrush}}" Margin="4,1"/>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </TabItem>
+                    </TabControl>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="2" Background="#0E1626" BorderBrush="#2A3A52" BorderThickness="0,1,0,0">
+            <Grid Margin="18,0">
+                <TextBlock x:Name="LblStats" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas" FontSize="12"
+                           Foreground="{StaticResource MutedBrush}"
+                           Text="запросы 0   активных 0   ошибки 0   ↑ 0   ↓ 0"/>
+                <TextBlock x:Name="LblLastError" HorizontalAlignment="Right" VerticalAlignment="Center"
+                           Foreground="{StaticResource RedBrush}" FontSize="12"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

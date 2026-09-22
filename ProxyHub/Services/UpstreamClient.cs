@@ -20,14 +20,25 @@ public static class UpstreamClient
             : await ConnectSocks5Async(config, host, port, ct);
     }
 
-    public static async Task<Stream> ConnectDirectAsync(string host, int port, CancellationToken ct)
+    public static Task<Stream> ConnectDirectAsync(string host, int port, CancellationToken ct)
+        => ConnectDirectAsync(host, port, ct, TimeSpan.FromSeconds(15));
+
+    public static async Task<Stream> ConnectDirectAsync(string host, int port, CancellationToken ct, TimeSpan timeout)
     {
         var tcp = new TcpClient { NoDelay = true };
         try
         {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(TimeSpan.FromSeconds(15));
-            await tcp.ConnectAsync(host, port, timeout.Token);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            linked.CancelAfter(timeout);
+            try
+            {
+                await tcp.ConnectAsync(host, port, linked.Token);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                throw new TimeoutException($"Таймаут подключения к {host}:{port}.");
+            }
+
             return new TcpOwnedStream(tcp);
         }
         catch
@@ -103,6 +114,11 @@ public static class UpstreamClient
             await DrainBindAddressAsync(stream, reply[3], timeout.Token);
             return new TcpOwnedStream(tcp);
         }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            tcp.Dispose();
+            throw new TimeoutException($"Таймаут SOCKS5 {host}:{port}.");
+        }
         catch
         {
             tcp.Dispose();
@@ -151,6 +167,11 @@ public static class UpstreamClient
             ThrowIfHttpConnectFailed(Encoding.ASCII.GetString(headers), port);
 
             return new TcpOwnedStream(tcp);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            tcp.Dispose();
+            throw new TimeoutException($"Таймаут HTTP CONNECT {host}:{port}.");
         }
         catch
         {

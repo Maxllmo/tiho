@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.IO;
 using System.Net.Security;
+using System.Net.Sockets;
 using System.Text;
 using ProxyHub.Models;
 
@@ -9,10 +11,24 @@ public static class ProxyTester
 {
     private const string TestHost = "api.ipify.org";
 
+    public static async Task<int> TcpPingAsync(string host, int port, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(host) || port is <= 0 or > 65535)
+            throw new InvalidOperationException("Не задан хост или порт.");
+
+        var sw = Stopwatch.StartNew();
+        using var tcp = new TcpClient { NoDelay = true };
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(3));
+        await tcp.ConnectAsync(host.Trim(), port, timeout.Token);
+        sw.Stop();
+        return (int)Math.Max(1, sw.ElapsedMilliseconds);
+    }
+
     public static async Task<string> TestAsync(AppConfig config, CancellationToken ct)
     {
         if (!config.IsConfigured)
-            throw new InvalidOperationException("Сначала укажите адрес и порт прокси Amnezia.");
+            throw new InvalidOperationException("Сначала добавьте и подключите сервер.");
 
         // HTTPS CONNECT :443 — так ходят PS5 и браузер. CONNECT :80 многие HTTP-прокси режут 403.
         await using var raw = await UpstreamClient.OpenAsync(config, TestHost, 443, bypass: false, ct);

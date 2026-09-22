@@ -15,7 +15,9 @@ public partial class MainWindow : Window
 {
     private readonly LogService _log = new();
     private readonly HubStats _stats = new();
+    private readonly ClientTracker _clients = new();
     private readonly SystemProxyService _systemProxy = new();
+    private readonly SingBoxService _vpn = new();
     private readonly DispatcherTimer _statsTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
     private LocalHttpProxy? _proxy;
     private AppConfig _config = new();
@@ -25,11 +27,12 @@ public partial class MainWindow : Window
     private bool _pcOn;
     private bool _suppressOptionEvents;
     private bool _trayHintShown;
+    private string? _editingId;
 
     public MainWindow()
     {
         InitializeComponent();
-        _proxy = new LocalHttpProxy(_log, _stats, () => _config);
+        _proxy = new LocalHttpProxy(_log, _stats, _clients, () => _config);
         LstAll.ItemsSource = _log.All;
         LstErrors.ItemsSource = _log.Errors;
         _log.All.CollectionChanged += (_, _) => ScrollToEnd(LstAll);
@@ -43,12 +46,18 @@ public partial class MainWindow : Window
     {
         _config = ConfigStore.Load();
         _suppressOptionEvents = true;
-        ApplyConfigToUi(_config);
+        ApplyOptionsToUi(_config);
+        _editingId = string.IsNullOrEmpty(_config.ActiveProfileId)
+            ? _config.Profiles.FirstOrDefault()?.Id
+            : _config.ActiveProfileId;
+        LoadEditor();
         _suppressOptionEvents = false;
-        RefreshLanLabels();
+        SyncLiveUpstream();
         RefreshStatus();
         _log.Sys("Proxy Hub запущен.");
-        _log.Sys("Сайты .ru и .рф всегда идут напрямую, мимо Amnezia.");
+        _log.Sys("Сайты .ru и .рф всегда идут напрямую, мимо прокси и VPN.");
+        if (_config.Profiles.Count > 0)
+            _log.Sys($"Загружено серверов: {_config.Profiles.Count}.");
 
         if (!_config.PcProxyEnabled && _systemProxy.IsPointingToUs(_config.ListenPort))
         {
@@ -80,8 +89,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        SaveFromUi();
+        PersistEditor();
+        SaveConfig();
         await StopHubAsync(restorePc: true);
+        await _vpn.StopAsync();
         if (_tray is not null)
         {
             _tray.Visible = false;
@@ -171,38 +182,94 @@ public partial class MainWindow : Window
         Activate();
     }
 
-    private void ApplyConfigToUi(AppConfig cfg)
+    private void ApplyOptionsToUi(AppConfig cfg)
     {
-        CmbType.SelectedIndex = cfg.UpstreamType.Equals("HTTP", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
-        TxtHost.Text = cfg.Host;
-        TxtPort.Text = cfg.Port.ToString(CultureInfo.InvariantCulture);
-        TxtUser.Text = cfg.Username;
-        TxtPass.Password = cfg.Password;
         ChkAutoHub.IsChecked = cfg.AutoStartHub;
         ChkTray.IsChecked = cfg.MinimizeToTray;
         ChkStartup.IsChecked = cfg.StartWithWindows;
-        RadPs5Hub.IsChecked = cfg.Ps5ViaLocalHub;
-        RadPs5Direct.IsChecked = !cfg.Ps5ViaLocalHub;
     }
 
-    private void SaveFromUi()
+    private ServerProfile? SelectedProfile =>
+        _config.Profiles.FirstOrDefault(p => p.Id == _editingId)
+        ?? _config.ActiveProfile
+        ?? _config.Profiles.FirstOrDefault();
+
+    private void PersistEditor()
     {
-        _config.UpstreamType = (CmbType.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "SOCKS5";
-        _config.Host = TxtHost.Text.Trim();
-        _config.Port = ParsePort(TxtPort.Text, 1080);
-        _config.Username = TxtUser.Text.Trim();
-        _config.Password = TxtPass.Password;
+        var profile = EnsureAmnezia();
+        profile.Name = "Amnezia";
+        profile.Kind = "proxy";
+        profile.Protocol = "HTTP";
+        profile.Host = TxtHost.Text.Trim();
+        profile.Port = ParsePort(TxtPort.Text, profile.Port > 0 ? profile.Port : 3128);
+        profile.Username = TxtUser.Text.Trim();
+        profile.Password = TxtPass.Password;
+        _editingId = profile.Id;
+        _config.ActiveProfileId = profile.Id;
+    }
+
+    private ServerProfile EnsureAmnezia()
+    {
+        var profile = _config.Profiles.FirstOrDefault(p => p.Id == _editingId && !p.IsVpn)
+                      ?? _config.Profiles.FirstOrDefault(p => !p.IsVpn);
+        if (profile is not null)
+            return profile;
+
+        profile = new ServerProfile
+        {
+            Name = "Amnezia",
+            Kind = "proxy",
+            Protocol = "HTTP",
+            Port = 3128
+        };
+        _config.Profiles.Add(profile);
+        return profile;
+    }
+
+    private void LoadEditor()
+    {
+        var profile = _config.Profiles.FirstOrDefault(p => p.Id == _editingId && !p.IsVpn)
+                      ?? _config.Profiles.FirstOrDefault(p => !p.IsVpn);
+        _editingId = profile?.Id;
+        TxtHost.Text = profile?.Host ?? "";
+        TxtPort.Text = (profile?.Port is > 0 and <= 65535 ? profile.Port : 3128).ToString(CultureInfo.InvariantCulture);
+        TxtUser.Text = profile?.Username ?? "";
+        TxtPass.Password = profile?.Password ?? "";
+    }
+
+    private void SaveConfig()
+    {
         if (_config.ListenPort is <= 0 or > 65535)
             _config.ListenPort = 3128;
         _config.AutoStartHub = ChkAutoHub.IsChecked == true;
         _config.MinimizeToTray = ChkTray.IsChecked == true;
         _config.StartWithWindows = ChkStartup.IsChecked == true;
-        _config.Ps5ViaLocalHub = RadPs5Hub.IsChecked == true;
         _config.PcProxyEnabled = _pcOn;
+        SyncLiveUpstream();
         ConfigStore.Save(_config);
         StartupService.SetEnabled(_config.StartWithWindows);
         RefreshStatus();
-        RefreshLanLabels();
+        UpdateTrayTip();
+    }
+
+    private void SyncLiveUpstream()
+        => _config.SyncLiveFromActive(_vpn.IsRunning ? _vpn.SocksPort : null);
+
+    private async Task SyncActiveCoreAsync()
+    {
+        var profile = _config.ActiveProfile;
+        if (profile is { IsVpn: true, IsConfigured: true })
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(4));
+            await _vpn.StartAsync(profile, _log, cts.Token);
+        }
+        else if (_vpn.IsRunning)
+        {
+            await _vpn.StopAsync();
+            _log.Sys("VPN-ядро остановлено.");
+        }
+
+        SyncLiveUpstream();
     }
 
     private static void ScrollToEnd(ListBox list)
@@ -217,28 +284,43 @@ public partial class MainWindow : Window
 
     private async void BtnApply_Click(object sender, RoutedEventArgs e)
     {
-        SaveFromUi();
-        _log.Sys($"Настройки применены: {_config.UpstreamType} {_config.Host}:{_config.Port}");
-        await SyncHubAsync();
+        PersistEditor();
+        SaveConfig();
+        var profile = SelectedProfile;
+        _log.Sys(profile is null
+            ? "Настройки сохранены."
+            : $"Сохранён сервер: {profile.Name}");
+        if (profile is not null && profile.Id == _config.ActiveProfileId)
+        {
+            await SyncActiveCoreAsync();
+            await SyncHubAsync();
+        }
         LblTest.Text = "Сохранено.";
+        LoadEditor();
     }
 
     private async void BtnTest_Click(object sender, RoutedEventArgs e)
     {
-        SaveFromUi();
-        LblTest.Text = "Проверяю upstream...";
+        PersistEditor();
+        var profile = SelectedProfile;
+        if (profile is not null)
+            _config.ActiveProfileId = profile.Id;
+
+        LblTest.Text = "Проверяю исходящий IP...";
         try
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+            await SyncActiveCoreAsync();
+            SaveConfig();
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             var ip = await ProxyTester.TestAsync(_config, cts.Token);
             LblTest.Text = $"Работает. Исходящий IP: {ip}";
-            _log.Sys($"Проверка upstream успешна. Исходящий IP {ip}");
+            _log.Sys($"Проверка успешна. Исходящий IP {ip}");
             RefreshStatus(testedOk: true);
         }
         catch (Exception ex)
         {
             LblTest.Text = $"Ошибка: {ex.Message}";
-            _log.Error("SYS", $"Проверка upstream: {ex.Message}");
+            _log.Error("SYS", $"Проверка: {ex.Message}");
             RefreshStatus(testedOk: false);
         }
     }
@@ -249,7 +331,7 @@ public partial class MainWindow : Window
     }
 
     private bool HubNeeded =>
-        _config.AutoStartHub || _pcOn || _config.Ps5ViaLocalHub;
+        _config.AutoStartHub || _pcOn || _config.Ps5ViaLocalHub || (_config.ActiveProfile?.IsVpn == true);
 
     private async Task SyncHubAsync()
     {
@@ -264,15 +346,15 @@ public partial class MainWindow : Window
         if (_proxy?.IsRunning == true)
             return;
 
-        SaveFromUi();
+        PersistEditor();
+        SaveConfig();
         try
         {
-            _proxy ??= new LocalHttpProxy(_log, _stats, () => _config);
+            _proxy ??= new LocalHttpProxy(_log, _stats, _clients, () => _config);
             await _proxy.StartAsync(_config.ListenPort);
-            RefreshLanLabels();
             RefreshStatus();
             if (!_config.IsConfigured)
-                _log.Sys("Хаб слушает, но upstream ещё не задан. Запросы не на .ru/.рф получат 502.");
+                _log.Sys("Хаб слушает, но активный сервер ещё не задан. Запросы не на .ru/.рф получат 502.");
         }
         catch (Exception ex)
         {
@@ -290,14 +372,16 @@ public partial class MainWindow : Window
             await _proxy.StopAsync();
 
         RefreshStatus();
-        RefreshLanLabels();
     }
 
     private async Task SetPcProxyAsync(bool enable)
     {
-        SaveFromUi();
+        PersistEditor();
+        SaveConfig();
         if (enable)
         {
+            if (_config.ActiveProfile is { IsVpn: true })
+                await SyncActiveCoreAsync();
             if (_proxy?.IsRunning != true)
                 await StartHubAsync();
             if (_proxy?.IsRunning != true)
@@ -330,7 +414,8 @@ public partial class MainWindow : Window
     {
         if (_suppressOptionEvents || !IsLoaded)
             return;
-        SaveFromUi();
+        PersistEditor();
+        SaveConfig();
         await SyncHubAsync();
     }
 
@@ -346,53 +431,6 @@ public partial class MainWindow : Window
         });
     }
 
-    private void BtnCopyPs5_Click(object sender, RoutedEventArgs e)
-    {
-        var text = GetPs5Endpoint();
-        if (string.IsNullOrEmpty(text))
-        {
-            LblTest.Text = "Сначала укажите сервер Squid сверху.";
-            return;
-        }
-        Clipboard.SetText(text);
-        LblTest.Text = $"Скопировано: {text}";
-        _log.Sys($"Адрес для PS5 скопирован: {text}");
-    }
-
-    private void RefreshLanLabels()
-    {
-        var listen = ListenPortNow();
-        if (RadPs5Hub.IsChecked == true)
-        {
-            LblPs5.Text = $"Адрес: {LanInfo.PrimaryIpv4()}\nПорт:  {listen}";
-        }
-        else if (_config.IsConfigured)
-        {
-            LblPs5.Text = $"Адрес: {_config.Host}\nПорт:  {_config.Port}";
-        }
-        else
-        {
-            LblPs5.Text = "Адрес: —\nПорт:  —";
-        }
-    }
-
-    private int ListenPortNow()
-    {
-        if (_proxy?.IsRunning == true)
-            return _proxy.BoundPort;
-        return _config.ListenPort is > 0 and <= 65535 ? _config.ListenPort : 3128;
-    }
-
-    private string GetPs5Endpoint()
-    {
-        if (RadPs5Hub.IsChecked == true)
-            return $"{LanInfo.PrimaryIpv4()}:{ListenPortNow()}";
-
-        if (!_config.IsConfigured)
-            return "";
-        return $"{_config.Host}:{_config.Port}";
-    }
-
     private void RefreshStatus(bool? testedOk = null)
     {
         var hubOn = _proxy?.IsRunning == true;
@@ -402,41 +440,55 @@ public partial class MainWindow : Window
         DotPc.Fill = BrushOf(_pcOn ? "#3ECF8E" : "#8A9BB5");
         LblPc.Text = _pcOn ? "ПК через хаб" : "ПК напрямую";
 
+        var active = _config.ActiveProfile;
         if (testedOk == true)
         {
             DotUp.Fill = BrushOf("#3ECF8E");
-            LblUp.Text = "Upstream OK";
+            LblUp.Text = active is null ? "Upstream OK" : active.Name;
         }
         else if (testedOk == false)
         {
             DotUp.Fill = BrushOf("#F0617D");
-            LblUp.Text = "Upstream ошибка";
+            LblUp.Text = "Ошибка сервера";
         }
-        else if (_config.IsConfigured)
+        else if (active is { IsVpn: true } && _vpn.IsRunning)
+        {
+            DotUp.Fill = BrushOf("#3ECF8E");
+            LblUp.Text = $"VPN {active.Name}";
+        }
+        else if (active is { IsConfigured: true, IsVpn: false })
         {
             DotUp.Fill = BrushOf("#F0B429");
-            LblUp.Text = $"{_config.UpstreamType} {_config.Host}:{_config.Port}";
+            LblUp.Text = $"{active.Protocol} {active.Host}:{active.Port}";
+        }
+        else if (active is { IsVpn: true })
+        {
+            DotUp.Fill = BrushOf("#F0B429");
+            LblUp.Text = $"VPN не подключён";
         }
         else
         {
             DotUp.Fill = BrushOf("#F0B429");
-            LblUp.Text = "Прокси не задан";
+            LblUp.Text = "Сервер не задан";
         }
+
+        UpdateTrayTip();
+    }
+
+    private void UpdateTrayTip()
+    {
+        if (_tray is null)
+            return;
+        var name = _config.ActiveProfile?.Name ?? "сервер не задан";
+        var text = $"Proxy Hub — {name}";
+        _tray.Text = text.Length <= 63 ? text : text[..63];
     }
 
     private void RefreshStats()
     {
         LblStats.Text =
-            $"запросы {Interlocked.Read(ref _stats.Requests)}   активных {Volatile.Read(ref _stats.Active)}   ошибки {Interlocked.Read(ref _stats.Errors)}   ↑ {FormatBytes(Interlocked.Read(ref _stats.BytesUp))}   ↓ {FormatBytes(Interlocked.Read(ref _stats.BytesDown))}";
+            $"запросы {Interlocked.Read(ref _stats.Requests)}   активных {Volatile.Read(ref _stats.Active)}   ошибки {Interlocked.Read(ref _stats.Errors)}   ↑ {HubStats.FormatBytes(Interlocked.Read(ref _stats.BytesUp))}   ↓ {HubStats.FormatBytes(Interlocked.Read(ref _stats.BytesDown))}";
         LblLastError.Text = string.IsNullOrEmpty(_stats.LastError) ? "" : _stats.LastError;
-    }
-
-    private static string FormatBytes(long bytes)
-    {
-        if (bytes < 1024) return $"{bytes} B";
-        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:0.0} KB";
-        if (bytes < 1024L * 1024 * 1024) return $"{bytes / 1024.0 / 1024.0:0.0} MB";
-        return $"{bytes / 1024.0 / 1024.0 / 1024.0:0.00} GB";
     }
 
     private static SolidColorBrush BrushOf(string hex)

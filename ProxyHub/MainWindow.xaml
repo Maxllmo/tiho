@@ -4,8 +4,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:ProxyHub"
         Title="Proxy Hub"
-        Height="760" Width="1180"
-        MinHeight="640" MinWidth="980"
+        Height="800" Width="1220"
+        MinHeight="680" MinWidth="1040"
         Icon="pack://application:,,,/Assets/app.ico"
         Background="{StaticResource BgBrush}"
         Foreground="{StaticResource TextBrush}"
@@ -242,6 +242,11 @@
 
         <Border Grid.Row="0" Background="#0E1626" BorderBrush="#2A3A52" BorderThickness="0,0,0,1">
             <Grid Margin="18,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Image Width="40" Height="40" Margin="0,0,12,0"
                            Source="pack://application:,,,/Assets/logo-mark.png"
@@ -249,11 +254,11 @@
                            SnapsToDevicePixels="True"/>
                     <StackPanel>
                         <TextBlock Text="Proxy Hub" FontSize="16" FontWeight="SemiBold"/>
-                        <TextBlock Text="Amnezia · PS5 · ПК · обход .ru / .рф" Style="{StaticResource Muted}"/>
+                        <TextBlock Text="Прокси · обход .ru / .рф" Style="{StaticResource Muted}"/>
                     </StackPanel>
                 </StackPanel>
 
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <Border x:Name="PillHub" Style="{StaticResource Card}" Margin="0,0,8,0" Padding="12,8" CornerRadius="16">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse x:Name="DotHub" Width="8" Height="8" Fill="#F0617D" Margin="0,0,8,0"/>
@@ -278,7 +283,7 @@
 
         <Grid Grid.Row="1" Margin="16">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="380"/>
+                <ColumnDefinition Width="420"/>
                 <ColumnDefinition Width="16"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
@@ -287,15 +292,7 @@
                 <StackPanel>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <TextBlock Text="Прокси Amnezia" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                            <TextBlock Text="SOCKS5 из приложения Amnezia или HTTP, если ставили отдельно."
-                                       Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,12"/>
-
-                            <TextBlock Text="Тип" Style="{StaticResource Label}"/>
-                            <ComboBox x:Name="CmbType" Margin="0,0,0,10">
-                                <ComboBoxItem Content="SOCKS5" IsSelected="True"/>
-                                <ComboBoxItem Content="HTTP"/>
-                            </ComboBox>
+                            <TextBlock Text="Amnezia" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,12"/>
 
                             <Grid Margin="0,0,0,10">
                                 <Grid.ColumnDefinitions>
@@ -305,7 +302,7 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
                                     <TextBlock Text="Сервер" Style="{StaticResource Label}"/>
-                                    <TextBox x:Name="TxtHost" ToolTip="IP VPS Amnezia Hosting"/>
+                                    <TextBox x:Name="TxtHost" ToolTip="IP или домен Amnezia"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
                                     <TextBlock Text="Порт" Style="{StaticResource Label}"/>
@@ -335,7 +332,7 @@
                                     <ColumnDefinition Width="8"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <Button Grid.Column="0" Content="Применить" Style="{StaticResource GhostBtn}" Click="BtnApply_Click"/>
+                                <Button Grid.Column="0" Content="Сохранить" Style="{StaticResource GhostBtn}" Click="BtnApply_Click"/>
                                 <Button Grid.Column="2" Content="Проверить" Style="{StaticResource PrimaryBtn}" Click="BtnTest_Click"/>
                             </Grid>
                             <TextBlock x:Name="LblTest" Style="{StaticResource Muted}" Margin="0,8,0,0" TextWrapping="Wrap"/>
@@ -345,7 +342,7 @@
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <TextBlock Text="Этот компьютер" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                            <TextBlock Text="Windows идёт через локальный хаб: обход .ru и логи. Приставка сюда не подключается."
+                            <TextBlock Text="Windows идёт через локальный хаб: обход .ru и логи."
                                        Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,12"/>
 
                             <Button x:Name="BtnPc" Content="Включить на этом ПК" Style="{StaticResource PrimaryBtn}" Click="BtnPc_Click"/>
@@ -353,26 +350,6 @@
                             <CheckBox x:Name="ChkAutoHub" Content="Запускать хаб вместе с программой" Checked="ChkOptions_Changed" Unchecked="ChkOptions_Changed"/>
                             <CheckBox x:Name="ChkTray" Content="Сворачивать в трей вместо закрытия" Checked="ChkOptions_Changed" Unchecked="ChkOptions_Changed"/>
                             <CheckBox x:Name="ChkStartup" Content="Запускать вместе с Windows" Checked="ChkOptions_Changed" Unchecked="ChkOptions_Changed"/>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource Card}" Background="#152033">
-                        <StackPanel>
-                            <TextBlock Text="PlayStation 5" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                            <TextBlock TextWrapping="Wrap" Style="{StaticResource Muted}" Margin="0,0,0,10"
-                                       Text="Кабель это та же домашняя сеть, что и Wi‑Fi: для Squid на VPS оба выходят с одного IP. Логин на приставке не заполняйте."/>
-                            <RadioButton x:Name="RadPs5Direct" GroupName="Ps5Route"
-                                         Content="Напрямую на Squid (не через этот ПК)"
-                                         IsChecked="True"
-                                         Checked="ChkOptions_Changed"/>
-                            <RadioButton x:Name="RadPs5Hub" GroupName="Ps5Route"
-                                         Content="Через этот ПК — если нужен обход .ru в хабе"
-                                         Checked="ChkOptions_Changed"/>
-                            <TextBlock x:Name="LblPs5" FontFamily="Cascadia Mono, Consolas" FontSize="13"
-                                       Margin="0,10,0,0"
-                                       Text="Адрес: —&#x0a;Порт:  3128"/>
-                            <Button Content="Скопировать адрес для PS5" Style="{StaticResource GhostBtn}"
-                                    Margin="0,12,0,0" Click="BtnCopyPs5_Click"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>

@@ -30,7 +30,10 @@ public static class ConfigStore
         try
         {
             var json = File.ReadAllText(ConfigPath);
-            return JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
+            var cfg = JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
+            if (cfg.MigrateLegacyIfNeeded())
+                Save(cfg);
+            return cfg;
         }
         catch
         {

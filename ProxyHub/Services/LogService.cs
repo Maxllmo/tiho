@@ -22,6 +22,25 @@ public sealed class LogService
         _errFile = Path.Combine(ConfigStore.LogsDir, $"errors-{day}.log");
     }
 
+    public IReadOnlyList<LogEntry> Snapshot(string? source = null)
+    {
+        List<LogEntry> Copy()
+        {
+            lock (_gate)
+            {
+                IEnumerable<LogEntry> query = All;
+                if (!string.IsNullOrWhiteSpace(source))
+                    query = query.Where(e => e.Source.Equals(source, StringComparison.OrdinalIgnoreCase));
+                return query.ToList();
+            }
+        }
+
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+            return Copy();
+        return dispatcher.Invoke(Copy);
+    }
+
     public void Info(string source, string message) => Add("INFO", source, message);
     public void Bypass(string source, string message) => Add("BYPASS", source, message);
     public void Error(string source, string message) => Add("ERROR", source, message);

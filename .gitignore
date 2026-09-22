@@ -4,7 +4,6 @@ obj/
 dist/
 publish/
 ProxyHub-Setup.exe
-ProxyHub.apk
 *.user
 *.suo
 *.userosscache

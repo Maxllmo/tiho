@@ -1,6 +1,6 @@
 using System.Text.Json;
-using ProxyHub.Models;
-using ProxyHub.Services;
+using Tiho.Models;
+using Tiho.Services;
 
 static void Check(bool condition, string message) { if (!condition) throw new Exception(message); Console.WriteLine("PASS " + message); }
 var key = Convert.ToBase64String(Enumerable.Range(0, 32).Select(i => (byte)(i + 1)).ToArray());
@@ -11,7 +11,7 @@ Check(AmneziaConfigImporter.Parse(conf.Replace("10.77.0.2/32", "10.77.0.2/24"), 
 try { AmneziaConfigImporter.Parse(conf + "\n[Peer]\n", "bad"); throw new Exception("Multiple peers accepted"); } catch (InvalidOperationException) { Console.WriteLine("PASS server/multi-peer configs rejected"); }
 try { AmneziaConfigImporter.Parse(conf.Replace("PrivateKey = " + key, "PrivateKey = invalid"), "bad"); throw new Exception("Invalid key accepted"); } catch (InvalidOperationException) { Console.WriteLine("PASS invalid keys rejected"); }
 var config = new AppConfig { Profiles = new() { profile }, ActiveProfileId = profile.Id, ExcludedApps = new() { @"C:\Games\game.exe", "browser.exe" }, DirectDomains = new() { "Пример.рф", "example.com" } };
-var rulesDir = Path.GetFullPath("ProxyHub/Assets/Rules");
+var rulesDir = Path.GetFullPath("Tiho/Assets/Rules");
 var built = TunnelConfig.Build(config, 10800, 19090, "test-only-token", rulesDir, new[] { "87.121.114.149", "2001:db8::1" });
 var rules = built["route"]!["rules"]!.AsArray();
 Check(rules[1]!["process_path"]![0]!.GetValue<string>() == @"C:\Games\game.exe", "Application exclusions precede DNS and sniffing");

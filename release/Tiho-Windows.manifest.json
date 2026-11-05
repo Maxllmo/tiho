@@ -1,0 +1,24 @@
+{
+  "format": "split-zip",
+  "archive_name": "Tiho-Windows.zip",
+  "archive_sha256": "429d000dd70c073f863055f4768bf40353dc7487a603f9b9320c456df0317f0e",
+  "parts": [
+    {
+      "name": "Tiho-Windows.zip.001",
+      "size": 94371840,
+      "sha256": "37d42485782235fcf34b9f25f487d76a980a25dcc3ef937da6cef5f9e0e4ff68"
+    },
+    {
+      "name": "Tiho-Windows.zip.002",
+      "size": 94371840,
+      "sha256": "ec4ca167e305e6315088151e9f2dacc2194b552c2ed856ddd4b2faf8abd25941"
+    },
+    {
+      "name": "Tiho-Windows.zip.003",
+      "size": 10573372,
+      "sha256": "4936c9a8af5f6a44fd8f92b1a449198af9ff04918a96e4716c9027c13462d860"
+    }
+  ],
+  "version": "2.0.0",
+  "installer_sha256": "5a970170084a3bb9948f5fa245bf35e71eb7d1e291566993fe90a563a0d07182"
+}

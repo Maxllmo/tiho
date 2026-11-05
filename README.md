@@ -4,7 +4,9 @@
 
 ## Установка
 
-Запустите `output/Tiho-Setup.exe`. Установщик выбирает нативную сборку для Windows 10/11: x64, ARM64 или x86. Нужны права администратора для виртуального адаптера. .NET, ядро AmneziaWG, sing-box и списки маршрутизации уже входят в установщик; загрузок при установке нет.
+На GitHub нажмите **Code → Download ZIP**, распакуйте архив и запустите **release/Install-Tiho.cmd**. Скрипт соберёт части ZIP и откроет готовый установщик. Ничего компилировать и отдельно скачивать не нужно. Подробности — [release/README.md](release/README.md).
+
+Установщик выбирает нативную сборку для Windows 10/11: x64, ARM64 или x86. Нужны права администратора для виртуального адаптера. .NET, ядро AmneziaWG, sing-box и списки маршрутизации уже входят в установщик; загрузок при установке нет. После локальной сборки можно сразу запустить `output/Tiho-Setup.exe`.
 
 В приложении откройте **Настройки → Импорт AmneziaWG .conf**, выберите клиентскую конфигурацию, затем подключитесь. Нужен файл с одним `[Interface]` и одним `[Peer]`, а не конфигурация сервера. Старые настройки и логи ProxyHub не читаются.
 
@@ -21,19 +23,30 @@
 
 ## Сборка
 
+Структура проекта:
+
+```text
+Tiho/     Windows-приложение
+core/     движок AmneziaWG и сетевые тесты
+build/    сборка приложения, установщика и архива
+tests/    проверки импорта, маршрутов и статистики
+release/  готовая установка из GitHub
+licenses/ лицензии компонентов
+```
+
 На Windows нужны .NET SDK 8, Go 1.25+ и NSIS 3.11+. Запустите:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/build.ps1
+powershell -ExecutionPolicy Bypass -File build/build.ps1
 ```
 
-Скрипт проверяет SHA-256 скачанных официальных архивов, компилирует AWG-шлюз и приложение под три архитектуры и собирает `output/Tiho-Setup.exe`. Секретов и готовых конфигураций сервера в сборке нет. Разработка и проверки Windows-проекта на Linux: `dotnet build ProxyHub/ProxyHub.csproj -p:EnableWindowsTargeting=true`.
+Скрипт проверяет SHA-256 скачанных официальных архивов, компилирует AWG-шлюз и приложение под три архитектуры, собирает `output/Tiho-Setup.exe` и создаёт части ZIP для Git в `release/`. Секретов и готовых конфигураций сервера в сборке нет. Разработка и проверки Windows-проекта на Linux: `dotnet build Tiho/Tiho.csproj -p:EnableWindowsTargeting=true`.
 
 ## Проверки
 
 ```text
 dotnet run --project tests/Tiho.Checks.csproj
-cd awg-core
+cd core
 go test -race ./...
 ```
 
@@ -41,4 +54,4 @@ go test -race ./...
 
 Windows TUN, Планировщик заданий, UI и установка требуют отдельной проверки на настоящей Windows. Сборка и сетевые тесты в Linux не заменяют эту проверку.
 
-Компоненты и источники: `THIRD-PARTY-NOTICES.txt`, `licenses/`, `awg-core/go.mod`, `scripts/core-lock.json`.
+Компоненты и источники: `THIRD-PARTY-NOTICES.txt`, `licenses/`, `core/go.mod`, `build/core-lock.json`.

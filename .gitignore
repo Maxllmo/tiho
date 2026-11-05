@@ -1,44 +1,21 @@
-# Build
-bin/
-obj/
+# Local tooling and build output
+work/
+output/
 dist/
-publish/
-*.user
-*.suo
-*.userosscache
-*.sln.docstates
+**/bin/
+**/obj/
+Tiho/Core/
+release/ready/
 
-# Visual Studio / Rider
+# IDE files and local secrets
 .vs/
 .idea/
-*.rsuser
-
-# NuGet
-*.nupkg
-**/packages/*
-
-# Logs and local secrets
-*.log
+*.user
+*.suo
 *.pdb
+*.log
 .env
 .env.*
-
-# OS
 Thumbs.db
 Desktop.ini
 .DS_Store
-
-# Android TV (секреты, собранный apk и промежуточная сборка)
-android-tv/.gradle/
-android-tv/build/
-android-tv/app/build/
-android-tv/local.properties
-android-tv/secrets.properties
-android-tv/third_party/
-android-tv/app/src/main/jniLibs/
-android-tv/*.apk
-android-tv/.kotlin/
-
-work/
-output/
-ProxyHub/Core/

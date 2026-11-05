@@ -2,7 +2,7 @@ Tiho 2.0.0
 
 AmneziaWG gateway: official github.com/amnezia-vpn/amneziawg-go/v3,
 tag v3.1.20260828, MIT. Copyright 2017-2025 WireGuard LLC.
-Gateway source, dependency versions and checks are included in awg-core/.
+Gateway source, dependency versions and checks are included in core/.
 Source: https://github.com/amnezia-vpn/amneziawg-go/tree/v3.1.20260828
 
 sing-box 1.14.4: unmodified upstream Windows distribution, GPL-3.0-or-later,
@@ -13,7 +13,7 @@ Build/dependency metadata: https://github.com/SagerNet/sing-box/blob/v1.14.4/go.
 The corresponding source is available beside the release as well as at this URL.
 
 gVisor networking stack: Apache-2.0, Google LLC and contributors.
-Pinned version: 1f7806d17489 (see awg-core/go.mod and go.sum).
+Pinned version: 1f7806d17489 (see core/go.mod and go.sum).
 Source: https://github.com/google/gvisor/tree/1f7806d17489
 
 .NET 8 runtime and Windows Desktop: Microsoft and .NET contributors, MIT.
@@ -27,5 +27,5 @@ https://github.com/Loyalsoldier/geoip
 Data providers and their upstream attribution are retained in their source repositories.
 
 Other Go dependency copyright and license notices are included in licenses/.
-Pinned dependency sources are available through the versions in awg-core/go.mod
+Pinned dependency sources are available through the versions in core/go.mod
 and their integrity hashes in go.sum. Upstream notices accompany the source archive.

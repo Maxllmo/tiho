@@ -53,7 +53,9 @@ public static class TunnelConfig
             {
                 ["servers"] = new JsonArray
                 {
-                    new JsonObject { ["type"] = "udp", ["tag"] = "dns-direct", ["server"] = directDnsServer, ["server_port"] = 53, ["detour"] = "direct" },
+                    // An omitted detour uses the physical-network dialer. sing-box 1.14
+                    // rejects a detour to an otherwise empty direct outbound at runtime.
+                    new JsonObject { ["type"] = "udp", ["tag"] = "dns-direct", ["server"] = directDnsServer, ["server_port"] = 53 },
                     new JsonObject { ["type"] = "udp", ["tag"] = "dns-tunnel", ["server"] = "1.1.1.1", ["server_port"] = 53, ["detour"] = "proxy" }
                 },
                 ["rules"] = dnsRules,
@@ -66,7 +68,7 @@ public static class TunnelConfig
                 {
                     ["type"] = "tun", ["tag"] = "tun-in", ["interface_name"] = "Tiho",
                     ["address"] = new JsonArray("172.30.255.1/30", "fdfe:7469:686f::1/126"),
-                ["mtu"] = 1280, ["auto_route"] = true, ["strict_route"] = true,
+                    ["mtu"] = 1280, ["auto_route"] = true, ["strict_route"] = true,
                     ["dns_mode"] = "hijack", ["stack"] = "mixed", ["route_exclude_address"] = Strings(excludes)
                 }
             },

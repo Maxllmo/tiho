@@ -23,10 +23,10 @@ SetCompressor /SOLID lzma
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "Russian"
 
-VIProductVersion "2.1.0.0"
+VIProductVersion "2.1.1.0"
 VIAddVersionKey /LANG=1049 "ProductName" "Tiho"
 VIAddVersionKey /LANG=1049 "FileDescription" "Установка Tiho"
-VIAddVersionKey /LANG=1049 "FileVersion" "2.1.0"
+VIAddVersionKey /LANG=1049 "FileVersion" "2.1.1"
 VIAddVersionKey /LANG=1049 "LegalCopyright" "Tiho"
 
 Function .onInit
@@ -62,7 +62,7 @@ Section "Tiho" SEC_MAIN
     SetRegView 32
   ${EndIf}
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Tiho" "DisplayName" "Tiho"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Tiho" "DisplayVersion" "2.1.0"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Tiho" "DisplayVersion" "2.1.1"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Tiho" "DisplayIcon" "$INSTDIR\Tiho.exe"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Tiho" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Tiho" "NoModify" 1

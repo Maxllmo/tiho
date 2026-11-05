@@ -32,6 +32,13 @@ foreach ($Arch in @('x64','arm64','x86')) {
     Copy-Item "$Root/THIRD-PARTY-NOTICES.txt" $Publish -Force
     Copy-Item "$Root/licenses" $Publish -Recurse -Force
 }
+$HostArch = switch ($env:PROCESSOR_ARCHITECTURE) { 'ARM64' {'arm64'} 'x86' {'x86'} default {'x64'} }
+$PreviousTestCore = $env:TIHO_TEST_CORE
+try {
+    $env:TIHO_TEST_CORE = Join-Path $Root "Tiho/Core/$HostArch/sing-box.exe"
+    dotnet run --project tests/Tiho.Checks.csproj -c Release
+    if ($LASTEXITCODE) { throw 'Core startup/DNS smoke test failed; refusing to package this build.' }
+} finally { $env:TIHO_TEST_CORE = $PreviousTestCore }
 & $Nsis "$Root/build/Tiho.nsi"
 if ($LASTEXITCODE) { throw 'Installer build failed' }
 & "$PSScriptRoot/package-release.ps1"

@@ -29,7 +29,7 @@ public partial class MainWindow : Window
     private WinForms.NotifyIcon? _tray;
     private System.Drawing.Icon? _icon;
     private CancellationTokenSource? _connecting;
-    private bool _loaded, _desired, _sessionStarted, _transitioning, _polling, _pingBusy, _allowClose, _closing, _healthChecked;
+    private bool _loaded, _desired, _sessionStarted, _transitioning, _polling, _pingBusy, _allowClose, _closing, _healthChecked, _windowClosed;
     private int _failures, _apiFailures, _tick, _connectionEpoch;
     private int? _delay;
     private DateTime _retryAt;
@@ -85,6 +85,7 @@ public partial class MainWindow : Window
             NetworkChange.NetworkAvailabilityChanged += NetworkAvailabilityChanged;
             _timer.Start(); RefreshUi();
             await TryStartupAsync();
+            if (_closing) return;
             if (Environment.GetCommandLineArgs().Contains("--background") && _config.Profiles.Count > 0) Hide();
             if (_config.AutoConnect && _config.ActiveProfile is not null) { _desired = true; await ConnectAsync(); }
         }
@@ -384,12 +385,18 @@ public partial class MainWindow : Window
         var menu = new WinForms.ContextMenuStrip();
         menu.Items.Add("Открыть Tiho", null, (_, _) => RestoreFromTray());
         menu.Items.Add("Подключить / отключить", null, async (_, _) => { if (_desired) await RunUiAsync(DisconnectAsync); else { _desired = true; await RunUiAsync(() => ConnectAsync()); } });
-        menu.Items.Add("Выход", null, (_, _) => { _closing = true; Close(); });
+        menu.Items.Add("Выход", null, (_, _) => RequestExit());
         _tray.ContextMenuStrip = menu;
     }
-    private void RestoreFromTray() { Show(); WindowState = WindowState.Normal; Activate(); }
-    public void RequestExit() { _closing = true; Close(); }
-    private void Window_StateChanged(object sender, EventArgs e) { if (_loaded && WindowState == WindowState.Minimized && _config.MinimizeToTray) { Hide(); WindowState = WindowState.Normal; } }
+    private void RestoreFromTray() { if (_closing || _windowClosed) return; Show(); WindowState = WindowState.Normal; Activate(); }
+    public void RequestExit()
+    {
+        if (_closing || _windowClosed) return;
+        _closing = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => { if (!_windowClosed) Close(); }));
+    }
+    protected override void OnClosed(EventArgs e) { _windowClosed = true; base.OnClosed(e); }
+    private void Window_StateChanged(object sender, EventArgs e) { if (!_closing && _loaded && WindowState == WindowState.Minimized && _config.MinimizeToTray) { Hide(); WindowState = WindowState.Normal; } }
     private async void Window_Closing(object? sender, CancelEventArgs e)
     {
         if (_allowClose) return;
@@ -400,6 +407,16 @@ public partial class MainWindow : Window
         NetworkChange.NetworkAvailabilityChanged -= NetworkAvailabilityChanged;
         try { await DisconnectAsync(); await _tunnel.DisposeAsync(); }
         catch (Exception ex) { _log.Error("Tiho", ex.Message); }
-        finally { _tray?.Dispose(); _icon?.Dispose(); _allowClose = true; Close(); }
+        finally
+        {
+            _tray?.Dispose(); _tray = null; _icon?.Dispose(); _icon = null;
+            // StopAsync can finish synchronously. Always let this Closing event return
+            // before asking WPF to close a second time; otherwise Close() throws.
+            Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+            {
+                if (_windowClosed) return;
+                _allowClose = true; Close();
+            }));
+        }
     }
 }

@@ -42,4 +42,5 @@ usage.Begin(); usage.Sample(10, 20); usage.End();
 Check(new UsageTracker(usagePath).TotalDownload == 360, "A new session adds to lifetime totals");
 Check(UsageTracker.Duration(TimeSpan.FromHours(27)) == "1 д 03:00:00", "Duration does not wrap after 24 hours");
 Check(UsageTracker.Gigabytes(1_000_000_000).StartsWith("1"), "Decimal gigabytes use one billion bytes");
+if (Environment.GetEnvironmentVariable("TIHO_TEST_CORE") is { Length: > 0 } core) await CoreSmoke.RunAsync(core);
 Console.WriteLine("All Tiho checks passed.");

@@ -11,7 +11,7 @@
     <RootNamespace>Tiho</RootNamespace>
     <Product>Tiho</Product>
     <AssemblyTitle>Tiho</AssemblyTitle>
-    <Version>2.1.0</Version>
+    <Version>2.1.1</Version>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ForceDesignerDpiUnaware>false</ForceDesignerDpiUnaware>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>

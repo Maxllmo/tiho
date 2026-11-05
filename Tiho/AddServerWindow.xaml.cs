@@ -6,6 +6,7 @@ namespace Tiho;
 
 public partial class AddServerWindow : Window
 {
+    protected override void OnSourceInitialized(EventArgs e) { base.OnSourceInitialized(e); Tiho.Services.WindowTheme.ApplyDarkCaption(this); }
     private readonly string? _id;
     public ServerProfile? Result { get; private set; }
     public AddServerWindow(ServerProfile? profile = null)

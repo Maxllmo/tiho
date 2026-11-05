@@ -1,102 +1,103 @@
-<Window x:Class="Tiho.MainWindow"
- xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
- Title="Tiho" Width="900" Height="720" MinWidth="740" MinHeight="660" WindowStartupLocation="CenterScreen"
- Icon="Assets/app.ico" Loaded="Window_Loaded" Closing="Window_Closing" StateChanged="Window_StateChanged">
- <Grid Margin="28,22,28,20">
-  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-  <DockPanel Margin="0,0,0,22">
-   <StackPanel Orientation="Horizontal"><Image Source="Assets/logo-mark.png" Width="34" Height="34" Margin="0,0,10,0"/><TextBlock Text="Tiho" FontSize="27" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel>
-   <TextBlock Text="VPN для всего компьютера" Style="{StaticResource Muted}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-  </DockPanel>
-  <TabControl x:Name="Tabs" Grid.Row="1" BorderThickness="0" Background="Transparent">
-   <TabControl.Resources>
-    <Style TargetType="TabItem">
-     <Setter Property="Padding" Value="18,11"/><Setter Property="Foreground" Value="#777D89"/>
-     <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabItem">
-      <Border x:Name="Tab" Padding="{TemplateBinding Padding}" Margin="0,0,8,16" CornerRadius="6" Background="Transparent">
-       <ContentPresenter ContentSource="Header"/>
-      </Border>
-      <ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter TargetName="Tab" Property="Background" Value="White"/><Setter Property="Foreground" Value="#191C23"/></Trigger></ControlTemplate.Triggers>
-     </ControlTemplate></Setter.Value></Setter>
-    </Style>
-   </TabControl.Resources>
-   <TabItem Header="Подключение">
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-     <StackPanel>
-      <Border Style="{StaticResource Card}">
-       <Grid>
-        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-        <StackPanel>
-         <StackPanel Orientation="Horizontal"><Ellipse x:Name="StatusDot" Width="9" Height="9" Fill="#A2A7B2" Margin="0,0,9,0"/><TextBlock x:Name="LblStatus" Text="Отключено" FontSize="23" FontWeight="SemiBold"/></StackPanel>
-         <TextBlock x:Name="LblServer" Text="Добавьте конфигурацию AmneziaWG в настройках" Foreground="#777D89" Margin="18,9,12,0" TextWrapping="Wrap"/>
-         <TextBlock x:Name="LblRoute" Text="Весь ПК · Россия напрямую" Style="{StaticResource Muted}" Margin="18,7,0,0"/>
-        </StackPanel>
-        <Button x:Name="BtnConnect" Grid.Column="1" Content="Подключить" Style="{StaticResource Primary}" Width="155" Height="46" VerticalAlignment="Center" Click="BtnConnect_Click"/>
-       </Grid>
-      </Border>
-      <Border x:Name="Notice" Background="#FFF3D8" CornerRadius="6" Padding="14,10" Margin="0,12,0,0" Visibility="Collapsed"><TextBlock x:Name="LblNotice" TextWrapping="Wrap" Foreground="#80600E"/></Border>
-      <UniformGrid Columns="4" Margin="0,16,0,0">
-       <Border Style="{StaticResource Card}" Padding="16" Margin="0,0,6,0"><StackPanel><TextBlock Text="Время подключения" Style="{StaticResource Label}"/><TextBlock x:Name="LblDuration" Text="00:00:00" FontSize="24" FontWeight="SemiBold"/><TextBlock x:Name="LblTotalDuration" Text="Всего 00:00:00" Style="{StaticResource Muted}" Margin="0,7,0,0"/></StackPanel></Border>
-       <Border Style="{StaticResource Card}" Padding="16" Margin="5,0,5,0"><StackPanel><TextBlock Text="Скорость, Мбит/с" Style="{StaticResource Label}"/><TextBlock x:Name="LblDownload" Text="↓ 0,0" FontSize="24" FontWeight="SemiBold"/><TextBlock x:Name="LblUpload" Text="↑ 0,0 Мбит/с" Style="{StaticResource Muted}" Margin="0,7,0,0"/></StackPanel></Border>
-       <Border Style="{StaticResource Card}" Padding="16" Margin="5,0,5,0"><StackPanel><TextBlock Text="Пинг" Style="{StaticResource Label}"/><TextBlock x:Name="LblPing" Text="—" FontSize="24" FontWeight="SemiBold"/><TextBlock Text="Через сервер, HTTPS" Style="{StaticResource Muted}" Margin="0,7,0,0"/></StackPanel></Border>
-       <Border Style="{StaticResource Card}" Padding="16" Margin="6,0,0,0"><StackPanel><TextBlock Text="Трафик за сеанс" Style="{StaticResource Label}"/><TextBlock x:Name="LblTraffic" Text="0,00 ГБ" FontSize="24" FontWeight="SemiBold"/><TextBlock x:Name="LblLifetime" Text="Всего 0,00 ГБ" Style="{StaticResource Muted}" Margin="0,7,0,0"/></StackPanel></Border>
-      </UniformGrid>
-      <Border Style="{StaticResource Card}" Margin="0,16,0,0" Padding="20,17">
-       <StackPanel>
-        <DockPanel><TextBlock Text="Загрузка" FontWeight="SemiBold"/><TextBlock Text="Последние 60 секунд · Мбит/с" Style="{StaticResource Muted}" HorizontalAlignment="Right"/></DockPanel>
-        <Grid Height="106" Margin="0,14,0,8" ClipToBounds="True" SizeChanged="Chart_SizeChanged">
-         <Border BorderBrush="#EDF0F3" BorderThickness="0,0,0,1" VerticalAlignment="Bottom"/>
-         <Polyline x:Name="SpeedLine" Stroke="#21856B" StrokeThickness="2" StrokeLineJoin="Round"/>
+<Window x:Class="Tiho.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="Tiho" Width="940" Height="710" MinWidth="800" MinHeight="560" Style="{StaticResource AppWindow}" WindowStartupLocation="CenterScreen" Icon="Assets/app.ico"
+ Loaded="Window_Loaded" Closing="Window_Closing" StateChanged="Window_StateChanged">
+ <Grid>
+  <Grid.ColumnDefinitions><ColumnDefinition Width="174"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+  <Border Background="{StaticResource SidebarBrush}" BorderBrush="#202833" BorderThickness="0,0,1,0" Padding="14,24,14,18">
+   <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <StackPanel Orientation="Horizontal" Margin="9,0,0,35"><Image Source="Assets/logo-mark.png" Width="29" Height="29" Margin="0,0,10,0"/><TextBlock Text="Tiho" FontSize="24" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel>
+    <StackPanel Grid.Row="1">
+     <RadioButton x:Name="NavConnection" GroupName="Page" Style="{StaticResource Navigation}" IsChecked="True" Tag="0" Click="Navigation_Click"><StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE774;" FontSize="16" Margin="0,0,11,0" VerticalAlignment="Center"/><TextBlock Text="Подключение"/></StackPanel></RadioButton>
+     <RadioButton x:Name="NavSettings" GroupName="Page" Style="{StaticResource Navigation}" Tag="1" Click="Navigation_Click"><StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE713;" FontSize="16" Margin="0,0,11,0" VerticalAlignment="Center"/><TextBlock Text="Настройки"/></StackPanel></RadioButton>
+     <RadioButton x:Name="NavLogs" GroupName="Page" Style="{StaticResource Navigation}" Tag="2" Click="Navigation_Click"><StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8A5;" FontSize="16" Margin="0,0,11,0" VerticalAlignment="Center"/><TextBlock Text="Логи"/></StackPanel></RadioButton>
+    </StackPanel>
+    <StackPanel Grid.Row="2" Margin="9,0,0,0"><TextBlock Text="AmneziaWG" Style="{StaticResource Muted}"/><TextBlock Text="Tiho 2.1" Foreground="#596577" FontSize="11" Margin="0,5,0,0"/></StackPanel>
+   </Grid>
+  </Border>
+  <Grid Grid.Column="1" Margin="28,24,28,22">
+   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+   <Grid Margin="0,0,0,22"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="LblPageTitle" Text="Подключение" FontSize="24" FontWeight="SemiBold"/><Border Grid.Column="1" Background="#183328" CornerRadius="12" Padding="10,5" VerticalAlignment="Center"><TextBlock x:Name="LblRussiaBadge" Text="Россия напрямую" Foreground="{StaticResource AccentBrush}" FontSize="11"/></Border></Grid>
+   <TabControl x:Name="Tabs" Grid.Row="1" SelectionChanged="Tabs_SelectionChanged" Background="Transparent" BorderThickness="0">
+    <TabControl.Template><ControlTemplate TargetType="TabControl"><ContentPresenter ContentSource="SelectedContent"/></ControlTemplate></TabControl.Template>
+    <TabItem Header="Подключение">
+     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel>
+       <Border Style="{StaticResource Card}">
+        <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+         <StackPanel Orientation="Horizontal" Margin="0,0,0,13"><Ellipse x:Name="StatusDot" Width="8" Height="8" Fill="#788396" Margin="0,0,10,0"/><TextBlock x:Name="LblStatus" Text="Отключено" FontSize="22" FontWeight="SemiBold"/></StackPanel>
+         <StackPanel Grid.Row="1" Margin="0,0,16,0"><TextBlock x:Name="LblServer" Text="Добавьте сервер, чтобы начать" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/><TextBlock x:Name="LblRoute" Text="Весь компьютер · Россия напрямую" Foreground="#68768A" FontSize="12" Margin="0,7,0,0" TextWrapping="Wrap"/></StackPanel>
+         <Button x:Name="BtnConnect" Grid.Column="1" Grid.RowSpan="2" Content="Подключить" Style="{StaticResource Primary}" Width="148" Height="46" FontSize="14" VerticalAlignment="Center" Click="BtnConnect_Click"/>
         </Grid>
-        <DockPanel><TextBlock x:Name="LblTransferred" Text="↓ 0,00 ГБ   ↑ 0,00 ГБ" Style="{StaticResource Muted}"/><TextBlock x:Name="LblConnections" Text="0 соединений" Style="{StaticResource Muted}" HorizontalAlignment="Right"/></DockPanel>
-       </StackPanel>
-      </Border>
-      <TextBlock Text="Трафик: отправлено + получено через Tiho, включая прямые подключения. ГБ = 1 000 000 000 байт." Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="2,12,0,0"/>
-     </StackPanel>
-    </ScrollViewer>
-   </TabItem>
-   <TabItem Header="Настройки">
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
-     <StackPanel>
-      <Border Style="{StaticResource Card}"><StackPanel>
-       <TextBlock Text="Сервер" FontWeight="SemiBold" FontSize="17" Margin="0,0,0,14"/>
-       <ComboBox x:Name="CmbServers" DisplayMemberPath="Name" SelectionChanged="CmbServers_SelectionChanged"/>
-       <WrapPanel Margin="0,12,0,0"><Button Content="Импорт AmneziaWG .conf" Click="BtnImport_Click" Margin="0,0,8,8"/><Button Content="Добавить прокси" Click="BtnAddProxy_Click" Margin="0,0,8,8"/><Button Content="Изменить" Click="BtnEditServer_Click" Margin="0,0,8,8"/><Button Content="Удалить" Click="BtnRemoveServer_Click" Margin="0,0,0,8"/></WrapPanel>
-       <TextBlock Text="Для всего трафика и игр используйте клиентский .conf AmneziaWG. HTTP-прокси передаёт только TCP." Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,0"/>
-      </StackPanel></Border>
-      <Border Style="{StaticResource Card}" Margin="0,14,0,0"><StackPanel>
-       <TextBlock Text="Работа в фоне" FontWeight="SemiBold" FontSize="17" Margin="0,0,0,16"/>
-       <CheckBox x:Name="ChkAutoConnect" Content="Подключаться автоматически и восстанавливать связь"/>
-       <CheckBox x:Name="ChkStartup" Content="Запускать Tiho при входе в Windows"/>
-       <CheckBox x:Name="ChkTray" Content="При закрытии окна оставаться в трее" Margin="0"/>
-      </StackPanel></Border>
-      <Border Style="{StaticResource Card}" Margin="0,14,0,0"><StackPanel>
-       <TextBlock Text="Россия напрямую" FontWeight="SemiBold" FontSize="17" Margin="0,0,0,16"/>
-       <CheckBox x:Name="ChkRussia" Content="Обходить VPN для российских ресурсов"/>
-       <TextBlock Text="Российские домены, сервисы на .com и российские IPv4/IPv6. Они увидят ваш обычный IP провайдера." Style="{StaticResource Muted}" TextWrapping="Wrap"/>
-       <DockPanel Margin="0,14,0,0"><Button x:Name="BtnUpdateRules" Content="Обновить списки" Click="BtnUpdateRules_Click" DockPanel.Dock="Right"/><TextBlock x:Name="LblRules" Text="Встроенные списки доступны без загрузки" Style="{StaticResource Muted}" VerticalAlignment="Center" TextWrapping="Wrap"/></DockPanel>
-       <TextBlock Text="Дополнительные домены напрямую — по одному на строке" Style="{StaticResource Label}" Margin="0,16,0,7"/>
-       <TextBox x:Name="TxtDomains" Height="80" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
-      </StackPanel></Border>
-      <Border Style="{StaticResource Card}" Margin="0,14,0,0"><StackPanel>
-       <TextBlock Text="Программы без VPN" FontWeight="SemiBold" FontSize="17" Margin="0,0,0,8"/>
-       <TextBlock Text="Эти программы используют обычное подключение. Для приложения с несколькими .exe добавьте нужные процессы отдельно." Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,12"/>
-       <ListBox x:Name="LstExcludedApps" Height="112"/>
-       <WrapPanel Margin="0,10,0,0"><Button Content="Выбрать .exe" Click="BtnAddApp_Click" Margin="0,0,8,0"/><Button Content="Убрать из списка" Click="BtnRemoveApp_Click"/></WrapPanel>
-      </StackPanel></Border>
-      <Button x:Name="BtnSave" Content="Сохранить и применить" Style="{StaticResource Primary}" HorizontalAlignment="Left" Margin="0,18,0,12" Click="BtnSave_Click"/>
-      <TextBlock x:Name="LblSettingsResult" Foreground="#21856B" TextWrapping="Wrap" Margin="0,0,0,16"/>
-     </StackPanel>
-    </ScrollViewer>
-   </TabItem>
-   <TabItem Header="Логи">
-    <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-     <DockPanel Margin="0,0,0,14"><Button Content="Очистить" Click="BtnClearLogs_Click" DockPanel.Dock="Right"/><CheckBox x:Name="ChkErrors" Content="Только ошибки" Margin="0" VerticalAlignment="Center" Checked="LogFilter_Changed" Unchecked="LogFilter_Changed"/><TextBlock Text="Только текущий запуск · на диск не записываются" Style="{StaticResource Muted}" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="12,0,16,0"/></DockPanel>
-     <ListBox x:Name="LstLogs" Grid.Row="1" FontFamily="Consolas" FontSize="11" ScrollViewer.HorizontalScrollBarVisibility="Auto" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
-      <ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Display}" Padding="3,3"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Foreground" Value="#525A66"/><Style.Triggers><DataTrigger Binding="{Binding Level}" Value="ERROR"><Setter Property="Foreground" Value="#C14646"/></DataTrigger><DataTrigger Binding="{Binding Level}" Value="DIRECT"><Setter Property="Foreground" Value="#21856B"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock></DataTemplate></ListBox.ItemTemplate>
-     </ListBox>
-    </Grid>
-   </TabItem>
-  </TabControl>
+       </Border>
+       <Border x:Name="Notice" Background="#30261A" BorderBrush="#55412B" BorderThickness="1" CornerRadius="8" Padding="14,11" Margin="0,12,0,0" Visibility="Collapsed"><TextBlock x:Name="LblNotice" Foreground="#E9C58F" FontSize="12" TextWrapping="Wrap"/></Border>
+       <Border Style="{StaticResource Card}" Margin="0,16,0,0" Padding="22,19">
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+         <StackPanel Margin="0,0,15,20"><TextBlock Text="Время подключения" Style="{StaticResource Label}"/><TextBlock x:Name="LblDuration" Text="00:00:00" Style="{StaticResource Metric}"/><TextBlock x:Name="LblTotalDuration" Text="Всего 00:00:00" Style="{StaticResource Muted}"/></StackPanel>
+         <StackPanel Grid.Column="1" Margin="18,0,0,20"><TextBlock Text="Скорость · Мбит/с" Style="{StaticResource Label}"/><TextBlock x:Name="LblDownload" Text="↓ 0,0" Style="{StaticResource Metric}"/><TextBlock x:Name="LblUpload" Text="↑ 0,0 Мбит/с" Style="{StaticResource Muted}"/></StackPanel>
+         <StackPanel Grid.Row="1" Margin="0,0,15,0"><TextBlock Text="Задержка" Style="{StaticResource Label}"/><TextBlock x:Name="LblPing" Text="—" Style="{StaticResource Metric}"/><TextBlock Text="Через сервер, HTTPS" Style="{StaticResource Muted}"/></StackPanel>
+         <StackPanel Grid.Row="1" Grid.Column="1" Margin="18,0,0,0"><TextBlock Text="Трафик за сеанс" Style="{StaticResource Label}"/><TextBlock x:Name="LblTraffic" Text="0,00 ГБ" Style="{StaticResource Metric}"/><TextBlock x:Name="LblLifetime" Text="Всего 0,00 ГБ" Style="{StaticResource Muted}"/></StackPanel>
+         <Border Grid.RowSpan="2" Grid.Column="1" BorderBrush="{StaticResource LineBrush}" BorderThickness="1,0,0,0" HorizontalAlignment="Left" Margin="-1,0,0,0"/>
+        </Grid>
+       </Border>
+       <Border Style="{StaticResource Card}" Margin="0,16,0,0" Padding="22,17">
+        <StackPanel>
+         <DockPanel><TextBlock Text="Скорость загрузки" FontWeight="SemiBold" FontSize="13"/><TextBlock x:Name="LblChartScale" Text="60 секунд" Style="{StaticResource Muted}" HorizontalAlignment="Right"/></DockPanel>
+         <Grid Height="85" Margin="0,15,0,14" ClipToBounds="True" SizeChanged="Chart_SizeChanged">
+          <Border BorderBrush="#27303D" BorderThickness="0,0,0,1" VerticalAlignment="Bottom"/>
+          <Polyline x:Name="SpeedLine" Stroke="{StaticResource AccentBrush}" StrokeThickness="2" StrokeLineJoin="Round" Visibility="Collapsed"/>
+          <TextBlock x:Name="LblChartEmpty" Text="График появится после подключения" Foreground="#68768A" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+         </Grid>
+         <DockPanel><TextBlock x:Name="LblTransferred" Text="↓ 0,00 ГБ     ↑ 0,00 ГБ" Style="{StaticResource Muted}"/><TextBlock x:Name="LblConnections" Text="Соединений: 0" Style="{StaticResource Muted}" HorizontalAlignment="Right"/></DockPanel>
+        </StackPanel>
+       </Border>
+       <TextBlock Text="Трафик — отправлено и получено, включая прямые соединения." Foreground="#68768A" FontSize="11" TextWrapping="Wrap" Margin="2,12,0,0"/>
+      </StackPanel>
+     </ScrollViewer>
+    </TabItem>
+    <TabItem Header="Настройки">
+     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,5,0">
+      <StackPanel>
+       <Border Style="{StaticResource Card}"><StackPanel>
+        <TextBlock Text="Сервер" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,14"/>
+        <ComboBox x:Name="CmbServers" DisplayMemberPath="Name" SelectionChanged="CmbServers_SelectionChanged"/>
+        <WrapPanel Margin="0,12,0,0"><Button Content="Импортировать .conf" Style="{StaticResource Primary}" Click="BtnImport_Click" Margin="0,0,8,8"/><Button Content="Прокси" Click="BtnAddProxy_Click" Margin="0,0,8,8"/><Button Content="Изменить" Click="BtnEditServer_Click" Margin="0,0,8,8"/><Button Content="Удалить" Click="BtnRemoveServer_Click" Margin="0,0,0,8"/></WrapPanel>
+        <TextBlock Text="После импорта нажмите «Подключить». Через VPN пойдёт трафик всего ПК, кроме России и выбранных исключений." Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+        <Button Content="Где взять .conf для Amnezia Hosting? ↗" Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Click="BtnConfigHelp_Click" Margin="0,5,0,0"/>
+       </StackPanel></Border>
+       <Border Style="{StaticResource Card}" Margin="0,14,0,0"><StackPanel>
+        <TextBlock Text="Программы без VPN" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,8"/>
+        <TextBlock Text="Добавьте .exe программ, которые должны подключаться напрямую." Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+        <ListBox x:Name="LstExcludedApps" Height="100"/>
+        <WrapPanel Margin="0,10,0,0"><Button Content="Выбрать .exe" Click="BtnAddApp_Click" Margin="0,0,8,0"/><Button Content="Убрать" Click="BtnRemoveApp_Click"/></WrapPanel>
+       </StackPanel></Border>
+       <Border Style="{StaticResource Card}" Margin="0,14,0,0"><StackPanel>
+        <TextBlock Text="Маршрутизация" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,16"/>
+        <CheckBox x:Name="ChkRussia" Content="Российские ресурсы — напрямую"/>
+        <TextBlock Text="Домены и IP из списка увидят обычный адрес провайдера. Остальной трафик пойдёт через сервер." Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+        <DockPanel Margin="0,14,0,0"><Button x:Name="BtnUpdateRules" Content="Обновить списки" Click="BtnUpdateRules_Click" DockPanel.Dock="Right"/><TextBlock x:Name="LblRules" Text="Списки включены в приложение" Style="{StaticResource Muted}" VerticalAlignment="Center" TextWrapping="Wrap"/></DockPanel>
+        <TextBlock Text="Дополнительные домены напрямую" Style="{StaticResource Label}" Margin="0,16,0,8"/><TextBox x:Name="TxtDomains" Height="76" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
+       </StackPanel></Border>
+       <Border Style="{StaticResource Card}" Margin="0,14,0,0"><StackPanel>
+        <TextBlock Text="Работа в фоне" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,16"/>
+        <CheckBox x:Name="ChkAutoConnect" Content="Подключаться при запуске и восстанавливать связь"/>
+        <CheckBox x:Name="ChkStartup" Content="Запускать Tiho при входе в Windows"/>
+        <CheckBox x:Name="ChkTray" Content="При закрытии окна оставаться в трее" Margin="0"/>
+       </StackPanel></Border>
+       <Button x:Name="BtnSave" Content="Сохранить изменения" Style="{StaticResource Primary}" HorizontalAlignment="Left" Margin="0,18,0,10" Click="BtnSave_Click"/>
+       <TextBlock x:Name="LblSettingsResult" Foreground="{StaticResource AccentBrush}" TextWrapping="Wrap" FontSize="13" Margin="0,0,0,12"/>
+      </StackPanel>
+     </ScrollViewer>
+    </TabItem>
+    <TabItem Header="Логи">
+     <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <DockPanel Margin="0,0,0,14"><Button Content="Очистить" Click="BtnClearLogs_Click" DockPanel.Dock="Right"/><CheckBox x:Name="ChkErrors" Content="Только ошибки" Margin="0" VerticalAlignment="Center" Checked="LogFilter_Changed" Unchecked="LogFilter_Changed"/></DockPanel>
+      <ListBox x:Name="LstLogs" Grid.Row="1" FontFamily="Consolas" FontSize="11" ScrollViewer.HorizontalScrollBarVisibility="Auto" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+       <ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Display}" Padding="2,3"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Foreground" Value="#A9B5C7"/><Style.Triggers><DataTrigger Binding="{Binding Level}" Value="ERROR"><Setter Property="Foreground" Value="#FF9298"/></DataTrigger><DataTrigger Binding="{Binding Level}" Value="DIRECT"><Setter Property="Foreground" Value="{StaticResource AccentBrush}"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock></DataTemplate></ListBox.ItemTemplate>
+      </ListBox>
+      <TextBlock Grid.Row="2" Text="Только текущий запуск. После выхода логи очищаются." Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,12,0,0"/>
+     </Grid>
+    </TabItem>
+   </TabControl>
+  </Grid>
  </Grid>
 </Window>

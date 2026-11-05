@@ -33,7 +33,7 @@ try {
     }
 } finally { $ArchiveInput.Dispose() }
 $Manifest = @{
-    version = '2.0.0'; format = 'split-zip'; archive_name = 'Tiho-Windows.zip'
+    version = '2.1.0'; format = 'split-zip'; archive_name = 'Tiho-Windows.zip'
     archive_sha256 = (Get-FileHash -LiteralPath $Archive -Algorithm SHA256).Hash.ToLowerInvariant()
     installer_sha256 = (Get-FileHash -LiteralPath $Installer -Algorithm SHA256).Hash.ToLowerInvariant()
     parts = $Parts

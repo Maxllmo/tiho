@@ -43,10 +43,35 @@ public partial class MainWindow : Window
         InitTray();
     }
 
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        WindowTheme.ApplyDarkCaption(this);
+    }
+
+    private void Navigation_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is RadioButton { Tag: string page } && int.TryParse(page, out var index)) Tabs.SelectedIndex = index;
+    }
+
+    private void Tabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (e.OriginalSource != Tabs || LblPageTitle is null) return;
+        LblPageTitle.Text = Tabs.SelectedIndex switch { 1 => "Настройки", 2 => "Логи", _ => "Подключение" };
+        NavConnection.IsChecked = Tabs.SelectedIndex == 0;
+        NavSettings.IsChecked = Tabs.SelectedIndex == 1;
+        NavLogs.IsChecked = Tabs.SelectedIndex == 2;
+    }
+
+    private void BtnConfigHelp_Click(object sender, RoutedEventArgs e)
+        => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://github.com/Maxllmo/ProxyHub/blob/main/docs/amnezia-config.md") { UseShellExecute = true });
+
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
         try
         {
+            Height = Math.Min(Height, SystemParameters.WorkArea.Height);
+            Width = Math.Min(Width, SystemParameters.WorkArea.Width);
             _config = ConfigStore.Load();
             _usage = new UsageTracker(Path.Combine(ConfigStore.RootDir, "usage.json"));
             RoutingRules.EnsureBundled();
@@ -69,7 +94,7 @@ public partial class MainWindow : Window
     private async Task TryStartupAsync()
     {
         try { await StartupService.SetEnabledAsync(_config.StartWithWindows); }
-        catch (Exception ex) { _log.Error("Tiho", ex.Message); ShowNotice(ex.Message); }
+        catch (Exception ex) { _log.Error("Tiho", "Автозапуск: " + ex.Message); ShowNotice("Автозапуск не настроен. Подробности — на вкладке «Логи». VPN можно включить вручную."); }
     }
 
     private async void BtnConnect_Click(object sender, RoutedEventArgs e)
@@ -90,7 +115,7 @@ public partial class MainWindow : Window
         _transitioning = true;
         _connecting = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _connecting.CancelAfter(TimeSpan.FromSeconds(45));
-        LblStatus.Text = "Подключение…"; BtnConnect.Content = "Отменить"; StatusDot.Fill = Brush("#D4A23A");
+        LblStatus.Text = "Подключение…"; BtnConnect.Content = "Отменить"; StatusDot.Fill = Brush("#F0BD6D");
         try
         {
             await _tunnel.StartAsync(_config, _log, _connecting.Token);
@@ -228,9 +253,11 @@ public partial class MainWindow : Window
         var dialog = new OpenFileDialog { Title = "Клиентская конфигурация AmneziaWG", Filter = "Конфигурация AmneziaWG (*.conf)|*.conf", Multiselect = false };
         if (dialog.ShowDialog(this) != true) return;
         var profile = AmneziaConfigImporter.Parse(await File.ReadAllTextAsync(dialog.FileName), Path.GetFileNameWithoutExtension(dialog.FileName));
-        _config.Profiles.Add(profile); _config.ActiveProfileId = profile.Id; ConfigStore.Save(_config); ReloadServers();
-        LblSettingsResult.Text = "AmneziaWG добавлен. Можно подключаться.";
-        if (_desired) await RestartAsync(); else if (_config.AutoConnect) { _desired = true; await ConnectAsync(); }
+        _config.Profiles.Add(profile);
+        if (!_desired) _config.ActiveProfileId = profile.Id;
+        ConfigStore.Save(_config); ReloadServers();
+        LblSettingsResult.Text = _desired ? "Конфигурация добавлена. Выберите сервер в списке, чтобы переключиться." : "Конфигурация добавлена. Нажмите «Подключить» на главном экране.";
+        if (!_desired) Tabs.SelectedIndex = 0;
     });
 
     private async void BtnAddProxy_Click(object sender, RoutedEventArgs e) => await RunUiAsync(async () =>
@@ -299,11 +326,15 @@ public partial class MainWindow : Window
         {
             var noResponse = on && _healthChecked && _delay is null;
             LblStatus.Text = noResponse ? "Сервер не отвечает" : on ? "Подключено" : _desired ? "Переподключение…" : "Отключено";
-            StatusDot.Fill = Brush(noResponse ? "#D4A23A" : on ? "#21856B" : _desired ? "#D4A23A" : "#A2A7B2");
+            StatusDot.Fill = Brush(noResponse ? "#F0BD6D" : on ? "#70DEB5" : _desired ? "#F0BD6D" : "#788396");
             BtnConnect.Content = _desired ? "Отключить" : "Подключить";
         }
-        LblServer.Text = profile is null ? "Добавьте конфигурацию AmneziaWG в настройках" : $"{profile.Name} · {profile.Protocol}";
-        LblRoute.Text = "Весь ПК · " + (_config.BypassRussia ? "Россия напрямую" : "Россия через сервер") + (_config.ExcludedApps.Count > 0 ? $" · Исключений: {_config.ExcludedApps.Count}" : "");
+        BtnConnect.Background = (System.Windows.Media.Brush)FindResource(_desired ? "RaisedBrush" : "AccentBrush");
+        BtnConnect.Foreground = (System.Windows.Media.Brush)FindResource(_desired ? "TextBrush" : "InkBrush");
+        BtnConnect.BorderBrush = (System.Windows.Media.Brush)FindResource(_desired ? "LineBrush" : "AccentBrush");
+        LblServer.Text = profile is null ? "Добавьте сервер, чтобы начать" : $"{profile.Name} · {profile.Protocol}";
+        LblRussiaBadge.Text = _config.BypassRussia ? "Россия напрямую" : "Россия через VPN";
+        LblRoute.Text = "Весь компьютер · " + (_config.BypassRussia ? "Россия напрямую" : "Россия через сервер") + (_config.ExcludedApps.Count > 0 ? $" · Исключений: {_config.ExcludedApps.Count}" : "");
         LblPing.Text = on ? (_delay is int delay ? $"{delay} мс" : "—") : "—";
         if (_usage is not null)
         {
@@ -315,6 +346,8 @@ public partial class MainWindow : Window
             LblTransferred.Text = $"↓ {UsageTracker.Gigabytes(_usage.SessionDownload)}   ↑ {UsageTracker.Gigabytes(_usage.SessionUpload)}";
         }
         if (!on) LblConnections.Text = "Соединений: 0";
+        LblChartEmpty.Visibility = _speeds.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        SpeedLine.Visibility = _speeds.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         if (_tray is not null) _tray.Text = on ? "Tiho · подключено" : _desired ? "Tiho · переподключение" : "Tiho · отключено";
     }
 
@@ -323,6 +356,7 @@ public partial class MainWindow : Window
     {
         if (SpeedLine?.Parent is not Grid graph || graph.ActualWidth <= 0) return;
         var values = _speeds.ToArray(); var max = Math.Max(1, values.DefaultIfEmpty().Max());
+        LblChartScale.Text = values.Length == 0 ? "60 секунд" : $"До {max:0.0} Мбит/с · 60 с";
         var points = new PointCollection(); var width = graph.ActualWidth; var height = graph.ActualHeight - 4;
         for (var i = 0; i < 60; i++) { var index = i - (60 - values.Length); var value = index < 0 ? 0 : values[index]; points.Add(new Point(i * width / 59, height - value / max * height + 2)); }
         SpeedLine.Points = points;

@@ -1,62 +1,32 @@
-﻿using System.Windows;
-using System.Windows.Threading;
+using System.Windows;
 
 namespace ProxyHub;
 
 public partial class App : System.Windows.Application
 {
     private Mutex? _mutex;
-
+    private bool _ownsMutex;
+    private EventWaitHandle? _quit;
+    private RegisteredWaitHandle? _quitWait;
     protected override void OnStartup(StartupEventArgs e)
     {
-        _mutex = new Mutex(true, @"Local\ProxyHub.SingleInstance", out bool created);
-        if (!created)
+        var eventName = @"Local\Tiho.Quit." + System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value;
+        if (e.Args.Contains("--quit"))
         {
-            MessageBox.Show("Proxy Hub уже запущен.", "Proxy Hub", MessageBoxButton.OK, MessageBoxImage.Information);
-            Shutdown();
-            return;
+            try { using var quit = EventWaitHandle.OpenExisting(eventName); quit.Set(); } catch (WaitHandleCannotBeOpenedException) { }
+            Shutdown(); return;
         }
-
-        DispatcherUnhandledException += OnUiException;
-        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
-        {
-            if (args.ExceptionObject is Exception ex)
-                LogCrash(ex);
-        };
-        TaskScheduler.UnobservedTaskException += (_, args) =>
-        {
-            LogCrash(args.Exception);
-            args.SetObserved();
-        };
-
+        _mutex = new Mutex(true, @"Local\Tiho.SingleInstance", out _ownsMutex);
+        if (!_ownsMutex) { MessageBox.Show("Tiho уже работает. Откройте его через значок в трее.", "Tiho"); Shutdown(); return; }
+        _quit = new EventWaitHandle(false, EventResetMode.AutoReset, eventName);
+        _quitWait = ThreadPool.RegisterWaitForSingleObject(_quit, (_, _) => Dispatcher.BeginInvoke(() => (MainWindow as MainWindow)?.RequestExit()), null, Timeout.Infinite, false);
+        DispatcherUnhandledException += (_, args) => { MessageBox.Show(args.Exception.Message, "Tiho", MessageBoxButton.OK, MessageBoxImage.Error); args.Handled = true; };
+        TaskScheduler.UnobservedTaskException += (_, args) => args.SetObserved();
         base.OnStartup(e);
     }
-
-    private void OnUiException(object sender, DispatcherUnhandledExceptionEventArgs e)
-    {
-        LogCrash(e.Exception);
-        MessageBox.Show(e.Exception.Message, "Proxy Hub", MessageBoxButton.OK, MessageBoxImage.Error);
-        e.Handled = true;
-    }
-
-    private static void LogCrash(Exception ex)
-    {
-        try
-        {
-            var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ProxyHub", "logs");
-            Directory.CreateDirectory(dir);
-            File.AppendAllText(Path.Combine(dir, "crash.log"), $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {ex}\r\n\r\n");
-        }
-        catch
-        {
-            // ignored
-        }
-    }
-
     protected override void OnExit(ExitEventArgs e)
     {
-        _mutex?.ReleaseMutex();
-        _mutex?.Dispose();
-        base.OnExit(e);
+        _quitWait?.Unregister(null); _quit?.Dispose();
+        if (_ownsMutex) _mutex?.ReleaseMutex(); _mutex?.Dispose(); base.OnExit(e);
     }
 }

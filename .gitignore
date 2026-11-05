@@ -38,3 +38,7 @@ android-tv/third_party/
 android-tv/app/src/main/jniLibs/
 android-tv/*.apk
 android-tv/.kotlin/
+
+work/
+output/
+ProxyHub/Core/

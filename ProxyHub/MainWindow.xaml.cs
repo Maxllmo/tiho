@@ -1,10 +1,14 @@
-﻿using System.Diagnostics;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Globalization;
+using System.Net.NetworkInformation;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Microsoft.Win32;
 using ProxyHub.Models;
 using ProxyHub.Services;
 using WinForms = System.Windows.Forms;
@@ -14,500 +18,354 @@ namespace ProxyHub;
 public partial class MainWindow : Window
 {
     private readonly LogService _log = new();
-    private readonly HubStats _stats = new();
-    private readonly ClientTracker _clients = new();
-    private readonly SystemProxyService _systemProxy = new();
-    private readonly SingBoxService _vpn = new();
-    private readonly DispatcherTimer _statsTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
-    private LocalHttpProxy? _proxy;
+    private readonly TunnelService _tunnel = new();
+    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly CancellationTokenSource _lifetime = new();
+    private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly ObservableCollection<string> _excludedApps = new();
+    private readonly Queue<double> _speeds = new();
     private AppConfig _config = new();
+    private UsageTracker? _usage;
     private WinForms.NotifyIcon? _tray;
-    private System.Drawing.Icon? _appIcon;
-    private bool _reallyExit;
-    private bool _pcOn;
-    private bool _suppressOptionEvents;
-    private bool _trayHintShown;
-    private string? _editingId;
+    private System.Drawing.Icon? _icon;
+    private CancellationTokenSource? _connecting;
+    private bool _loaded, _desired, _sessionStarted, _transitioning, _polling, _pingBusy, _allowClose, _closing, _healthChecked;
+    private int _failures, _apiFailures, _tick, _connectionEpoch;
+    private int? _delay;
+    private DateTime _retryAt;
 
     public MainWindow()
     {
         InitializeComponent();
-        _proxy = new LocalHttpProxy(_log, _stats, _clients, () => _config);
-        LstAll.ItemsSource = _log.All;
-        LstErrors.ItemsSource = _log.Errors;
-        _log.All.CollectionChanged += (_, _) => ScrollToEnd(LstAll);
-        _log.Errors.CollectionChanged += (_, _) => ScrollToEnd(LstErrors);
-        _statsTimer.Tick += (_, _) => RefreshStats();
-        _statsTimer.Start();
+        LstExcludedApps.ItemsSource = _excludedApps;
+        LstLogs.ItemsSource = _log.All;
+        _timer.Tick += async (_, _) => await PollAsync();
         InitTray();
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
-        _config = ConfigStore.Load();
-        _suppressOptionEvents = true;
-        ApplyOptionsToUi(_config);
-        _editingId = string.IsNullOrEmpty(_config.ActiveProfileId)
-            ? _config.Profiles.FirstOrDefault()?.Id
-            : _config.ActiveProfileId;
-        LoadEditor();
-        _suppressOptionEvents = false;
-        SyncLiveUpstream();
-        RefreshStatus();
-        _log.Sys("Proxy Hub запущен.");
-        _log.Sys("Сайты .ru и .рф всегда идут напрямую, мимо прокси и VPN.");
-        if (_config.Profiles.Count > 0)
-            _log.Sys($"Загружено серверов: {_config.Profiles.Count}.");
-
-        if (!_config.PcProxyEnabled && _systemProxy.IsPointingToUs(_config.ListenPort))
+        try
         {
-            _systemProxy.Restore();
-            _log.Sys("Восстановлены прежние настройки прокси Windows после прошлого запуска.");
+            _config = ConfigStore.Load();
+            _usage = new UsageTracker(Path.Combine(ConfigStore.RootDir, "usage.json"));
+            RoutingRules.EnsureBundled();
+            ChkAutoConnect.IsChecked = _config.AutoConnect; ChkStartup.IsChecked = _config.StartWithWindows;
+            ChkTray.IsChecked = _config.MinimizeToTray; ChkRussia.IsChecked = _config.BypassRussia;
+            TxtDomains.Text = string.Join(Environment.NewLine, _config.DirectDomains);
+            foreach (var app in _config.ExcludedApps) _excludedApps.Add(app);
+            ReloadServers();
+            _loaded = true;
+            _log.Sys("Tiho запущен. Логи доступны только до закрытия приложения.");
+            NetworkChange.NetworkAvailabilityChanged += NetworkAvailabilityChanged;
+            _timer.Start(); RefreshUi();
+            await TryStartupAsync();
+            if (Environment.GetCommandLineArgs().Contains("--background") && _config.Profiles.Count > 0) Hide();
+            if (_config.AutoConnect && _config.ActiveProfile is not null) { _desired = true; await ConnectAsync(); }
         }
+        catch (Exception ex) { _log.Error("Tiho", ex.Message); ShowNotice("Не удалось загрузить Tiho: " + ex.Message); BtnConnect.IsEnabled = false; BtnSave.IsEnabled = false; }
+    }
 
-        if (_config.PcProxyEnabled)
-            await SetPcProxyAsync(true);
+    private async Task TryStartupAsync()
+    {
+        try { await StartupService.SetEnabledAsync(_config.StartWithWindows); }
+        catch (Exception ex) { _log.Error("Tiho", ex.Message); ShowNotice(ex.Message); }
+    }
+
+    private async void BtnConnect_Click(object sender, RoutedEventArgs e)
+    {
+        if (_desired) await RunUiAsync(DisconnectAsync);
         else
-            await SyncHubAsync();
-    }
-
-    private async void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
-    {
-        if (!_reallyExit && ChkTray.IsChecked == true)
         {
-            e.Cancel = true;
-            Hide();
-            if (_tray is not null)
-            {
-                _tray.Visible = true;
-                if (!_trayHintShown)
-                {
-                    _tray.ShowBalloonTip(2500, "Proxy Hub", "Работает в трее.", WinForms.ToolTipIcon.Info);
-                    _trayHintShown = true;
-                }
-            }
-            return;
-        }
-
-        PersistEditor();
-        SaveConfig();
-        await StopHubAsync(restorePc: true);
-        await _vpn.StopAsync();
-        if (_tray is not null)
-        {
-            _tray.Visible = false;
-            _tray.Icon = null;
-            _tray.Dispose();
-            _tray = null;
-        }
-        _appIcon?.Dispose();
-        _appIcon = null;
-    }
-
-    private void Window_StateChanged(object sender, EventArgs e)
-    {
-        if (WindowState == WindowState.Minimized && ChkTray.IsChecked == true)
-        {
-            Hide();
-            WindowState = WindowState.Normal;
-            if (_tray is not null)
-                _tray.Visible = true;
+            if (_config.ActiveProfile is null) { Tabs.SelectedIndex = 1; LblSettingsResult.Text = "Сначала импортируйте клиентский .conf AmneziaWG или добавьте прокси."; return; }
+            _desired = true; _failures = 0; await RunUiAsync(() => ConnectAsync());
         }
     }
 
-    private void InitTray()
+    private async Task ConnectAsync()
     {
-        _appIcon = LoadAppIcon();
-        _tray = new WinForms.NotifyIcon
-        {
-            Text = "Proxy Hub",
-            Visible = true,
-            Icon = _appIcon
-        };
-        _tray.DoubleClick += (_, _) => RestoreFromTray();
-        var menu = new WinForms.ContextMenuStrip();
-        menu.Items.Add("Открыть", null, (_, _) => RestoreFromTray());
-        menu.Items.Add("Выход", null, (_, _) =>
-        {
-            _reallyExit = true;
-            Close();
-        });
-        _tray.ContextMenuStrip = menu;
-    }
-
-    private static System.Drawing.Icon LoadAppIcon()
-    {
+        if (_closing || !_desired || _transitioning) return;
+        await _gate.WaitAsync(_lifetime.Token);
+        if (_closing || !_desired || _tunnel.IsRunning) { _gate.Release(); return; }
+        _transitioning = true;
+        _connecting = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _connecting.CancelAfter(TimeSpan.FromSeconds(45));
+        LblStatus.Text = "Подключение…"; BtnConnect.Content = "Отменить"; StatusDot.Fill = Brush("#D4A23A");
         try
         {
-            var info = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/Assets/app.ico"));
-            if (info?.Stream is not null)
-            {
-                using (info.Stream)
-                {
-                    var size = WinForms.SystemInformation.SmallIconSize;
-                    int w = Math.Max(16, size.Width);
-                    int h = Math.Max(16, size.Height);
-                    using var tmp = new System.Drawing.Icon(info.Stream, w, h);
-                    return (System.Drawing.Icon)tmp.Clone();
-                }
-            }
-        }
-        catch
-        {
-            // fall through to exe icon
-        }
-
-        try
-        {
-            var path = Environment.ProcessPath;
-            if (!string.IsNullOrEmpty(path))
-            {
-                var extracted = System.Drawing.Icon.ExtractAssociatedIcon(path);
-                if (extracted is not null)
-                    return extracted;
-            }
-        }
-        catch
-        {
-            // fall through to system icon
-        }
-
-        return (System.Drawing.Icon)System.Drawing.SystemIcons.Application.Clone();
-    }
-
-    private void RestoreFromTray()
-    {
-        Show();
-        WindowState = WindowState.Normal;
-        Activate();
-    }
-
-    private void ApplyOptionsToUi(AppConfig cfg)
-    {
-        ChkAutoHub.IsChecked = cfg.AutoStartHub;
-        ChkTray.IsChecked = cfg.MinimizeToTray;
-        ChkStartup.IsChecked = cfg.StartWithWindows;
-    }
-
-    private ServerProfile? SelectedProfile =>
-        _config.Profiles.FirstOrDefault(p => p.Id == _editingId)
-        ?? _config.ActiveProfile
-        ?? _config.Profiles.FirstOrDefault();
-
-    private void PersistEditor()
-    {
-        var profile = EnsureAmnezia();
-        profile.Name = "Amnezia";
-        profile.Kind = "proxy";
-        profile.Protocol = "HTTP";
-        profile.Host = TxtHost.Text.Trim();
-        profile.Port = ParsePort(TxtPort.Text, profile.Port > 0 ? profile.Port : 3128);
-        profile.Username = TxtUser.Text.Trim();
-        profile.Password = TxtPass.Password;
-        _editingId = profile.Id;
-        _config.ActiveProfileId = profile.Id;
-    }
-
-    private ServerProfile EnsureAmnezia()
-    {
-        var profile = _config.Profiles.FirstOrDefault(p => p.Id == _editingId && !p.IsVpn)
-                      ?? _config.Profiles.FirstOrDefault(p => !p.IsVpn);
-        if (profile is not null)
-            return profile;
-
-        profile = new ServerProfile
-        {
-            Name = "Amnezia",
-            Kind = "proxy",
-            Protocol = "HTTP",
-            Port = 3128
-        };
-        _config.Profiles.Add(profile);
-        return profile;
-    }
-
-    private void LoadEditor()
-    {
-        var profile = _config.Profiles.FirstOrDefault(p => p.Id == _editingId && !p.IsVpn)
-                      ?? _config.Profiles.FirstOrDefault(p => !p.IsVpn);
-        _editingId = profile?.Id;
-        TxtHost.Text = profile?.Host ?? "";
-        TxtPort.Text = (profile?.Port is > 0 and <= 65535 ? profile.Port : 3128).ToString(CultureInfo.InvariantCulture);
-        TxtUser.Text = profile?.Username ?? "";
-        TxtPass.Password = profile?.Password ?? "";
-    }
-
-    private void SaveConfig()
-    {
-        if (_config.ListenPort is <= 0 or > 65535)
-            _config.ListenPort = 3128;
-        _config.AutoStartHub = ChkAutoHub.IsChecked == true;
-        _config.MinimizeToTray = ChkTray.IsChecked == true;
-        _config.StartWithWindows = ChkStartup.IsChecked == true;
-        _config.PcProxyEnabled = _pcOn;
-        SyncLiveUpstream();
-        ConfigStore.Save(_config);
-        StartupService.SetEnabled(_config.StartWithWindows);
-        RefreshStatus();
-        UpdateTrayTip();
-    }
-
-    private void SyncLiveUpstream()
-        => _config.SyncLiveFromActive(_vpn.IsRunning ? _vpn.SocksPort : null);
-
-    private async Task SyncActiveCoreAsync()
-    {
-        var profile = _config.ActiveProfile;
-        if (profile is { IsVpn: true, IsConfigured: true })
-        {
-            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(4));
-            await _vpn.StartAsync(profile, _log, cts.Token);
-        }
-        else if (_vpn.IsRunning)
-        {
-            await _vpn.StopAsync();
-            _log.Sys("VPN-ядро остановлено.");
-        }
-
-        SyncLiveUpstream();
-    }
-
-    private static void ScrollToEnd(ListBox list)
-    {
-        if (list.Items.Count == 0)
-            return;
-        list.ScrollIntoView(list.Items[^1]);
-    }
-
-    private static int ParsePort(string text, int fallback)
-        => int.TryParse(text.Trim(), out var p) && p is > 0 and <= 65535 ? p : fallback;
-
-    private async void BtnApply_Click(object sender, RoutedEventArgs e)
-    {
-        PersistEditor();
-        SaveConfig();
-        var profile = SelectedProfile;
-        _log.Sys(profile is null
-            ? "Настройки сохранены."
-            : $"Сохранён сервер: {profile.Name}");
-        if (profile is not null && profile.Id == _config.ActiveProfileId)
-        {
-            await SyncActiveCoreAsync();
-            await SyncHubAsync();
-        }
-        LblTest.Text = "Сохранено.";
-        LoadEditor();
-    }
-
-    private async void BtnTest_Click(object sender, RoutedEventArgs e)
-    {
-        PersistEditor();
-        var profile = SelectedProfile;
-        if (profile is not null)
-            _config.ActiveProfileId = profile.Id;
-
-        LblTest.Text = "Проверяю исходящий IP...";
-        try
-        {
-            await SyncActiveCoreAsync();
-            SaveConfig();
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-            var ip = await ProxyTester.TestAsync(_config, cts.Token);
-            LblTest.Text = $"Работает. Исходящий IP: {ip}";
-            _log.Sys($"Проверка успешна. Исходящий IP {ip}");
-            RefreshStatus(testedOk: true);
+            await _tunnel.StartAsync(_config, _log, _connecting.Token);
+            if (!_desired) { await _tunnel.StopAsync(); return; }
+            if (!_sessionStarted) { _usage!.Begin(); _sessionStarted = true; } else _usage!.CoreRestarted();
+            _connectionEpoch++; _failures = _apiFailures = 0; _delay = null; _healthChecked = false; _tick = 0;
+            Notice.Visibility = Visibility.Collapsed;
+            if (_config.ActiveProfile?.Protocol == "HTTP") ShowNotice("HTTP-прокси передаёт только TCP. UDP заблокирован. Для игр импортируйте AmneziaWG .conf.");
+            _ = UpdatePingAsync();
         }
         catch (Exception ex)
         {
-            LblTest.Text = $"Ошибка: {ex.Message}";
-            _log.Error("SYS", $"Проверка: {ex.Message}");
-            RefreshStatus(testedOk: false);
+            _usage?.Pause();
+            if (_desired && !_closing)
+            {
+                _log.Error("Tiho", ex is OperationCanceledException ? "Истекло время подключения." : ex.Message);
+                ShowNotice(ex is OperationCanceledException ? "Сервер не подключился. Проверьте сеть и конфигурацию." : ex.Message);
+                ScheduleRetry();
+            }
         }
+        finally { _connecting.Dispose(); _connecting = null; _transitioning = false; _gate.Release(); RefreshUi(); }
     }
 
-    private async void BtnPc_Click(object sender, RoutedEventArgs e)
+    private void ScheduleRetry()
     {
-        await SetPcProxyAsync(!_pcOn);
+        _failures++; _retryAt = DateTime.UtcNow.AddSeconds(Math.Min(30, Math.Pow(2, Math.Min(_failures, 5))));
+        if (!_config.AutoConnect) _desired = false;
     }
 
-    private bool HubNeeded =>
-        _config.AutoStartHub || _pcOn || _config.Ps5ViaLocalHub || (_config.ActiveProfile?.IsVpn == true);
-
-    private async Task SyncHubAsync()
+    private async Task DisconnectAsync()
     {
-        if (HubNeeded)
-            await StartHubAsync();
-        else if (_proxy?.IsRunning == true)
-            await StopHubAsync(restorePc: false);
-    }
-
-    private async Task StartHubAsync()
-    {
-        if (_proxy?.IsRunning == true)
-            return;
-
-        PersistEditor();
-        SaveConfig();
+        _desired = false; _connecting?.Cancel();
+        await _gate.WaitAsync();
+        _transitioning = true;
         try
         {
-            _proxy ??= new LocalHttpProxy(_log, _stats, _clients, () => _config);
-            await _proxy.StartAsync(_config.ListenPort);
-            RefreshStatus();
-            if (!_config.IsConfigured)
-                _log.Sys("Хаб слушает, но активный сервер ещё не задан. Запросы не на .ru/.рф получат 502.");
+            if (_tunnel.IsRunning && _usage is not null)
+                try { var counters = await _tunnel.GetCountersAsync(CancellationToken.None); _usage.Sample(counters.Upload, counters.Download); } catch { }
+            await _tunnel.StopAsync(); _usage?.End(); _sessionStarted = false; _delay = null; _connectionEpoch++;
+            _log.Sys("Отключено. Обычное подключение Windows восстановлено.");
         }
+        finally { _transitioning = false; _gate.Release(); RefreshUi(); }
+    }
+
+    private async Task RestartAsync()
+    {
+        if (!_desired) return;
+        _connecting?.Cancel();
+        await _gate.WaitAsync();
+        _transitioning = true;
+        try
+        {
+            if (_tunnel.IsRunning && _usage is not null)
+                try { var c = await _tunnel.GetCountersAsync(_lifetime.Token); _usage.Sample(c.Upload, c.Download); } catch { }
+            _usage?.Pause(); await _tunnel.StopAsync();
+        }
+        finally { _transitioning = false; _gate.Release(); }
+        await ConnectAsync();
+    }
+
+    private async Task PollAsync()
+    {
+        if (!_loaded || _closing || _polling || _transitioning) return;
+        _polling = true;
+        var epoch = _connectionEpoch;
+        try
+        {
+            if (_tunnel.IsRunning)
+            {
+                var c = await _tunnel.GetCountersAsync(_lifetime.Token);
+                if (epoch != _connectionEpoch || _transitioning || !_desired || _closing) return;
+                _usage!.Sample(c.Upload, c.Download); _apiFailures = 0;
+                LblConnections.Text = $"Соединений: {c.Connections}";
+                _speeds.Enqueue(_usage.DownloadSpeed * 8 / 1_000_000); while (_speeds.Count > 60) _speeds.Dequeue();
+                DrawChart();
+                if (++_tick % 10 == 0) _usage.Save();
+                if (_tick % 15 == 0) _ = UpdatePingAsync();
+            }
+            else if (_desired)
+            {
+                _usage?.Pause();
+                if (DateTime.UtcNow >= _retryAt) await ConnectAsync();
+            }
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
         catch (Exception ex)
         {
-            _log.Error("SYS", $"Не удалось запустить хаб: {ex.Message}");
-            MessageBox.Show(ex.Message, "Proxy Hub", MessageBoxButton.OK, MessageBoxImage.Error);
+            if (epoch == _connectionEpoch && !_transitioning && ++_apiFailures >= 3 && _desired)
+            {
+                await _gate.WaitAsync();
+                try
+                {
+                    if (epoch == _connectionEpoch && _desired)
+                    {
+                        _transitioning = true; _log.Error("Tiho", "Потеряна связь с VPN-ядром: " + ex.Message);
+                        _usage?.Pause(); await _tunnel.StopAsync(); ScheduleRetry();
+                    }
+                }
+                finally { _transitioning = false; _gate.Release(); }
+            }
         }
+        finally { _polling = false; if (!_closing) RefreshUi(); }
     }
 
-    private async Task StopHubAsync(bool restorePc)
+    private async Task UpdatePingAsync()
     {
-        if (restorePc && _pcOn)
-            await SetPcProxyAsync(false);
-
-        if (_proxy is not null)
-            await _proxy.StopAsync();
-
-        RefreshStatus();
-    }
-
-    private async Task SetPcProxyAsync(bool enable)
-    {
-        PersistEditor();
-        SaveConfig();
-        if (enable)
+        if (_pingBusy || !_tunnel.IsRunning) return;
+        _pingBusy = true; var epoch = _connectionEpoch;
+        try
         {
-            if (_config.ActiveProfile is { IsVpn: true })
-                await SyncActiveCoreAsync();
-            if (_proxy?.IsRunning != true)
-                await StartHubAsync();
-            if (_proxy?.IsRunning != true)
-                return;
-
-            _systemProxy.EnableLocal(_proxy.BoundPort);
-            _pcOn = true;
-            _config.PcProxyEnabled = true;
-            ConfigStore.Save(_config);
-            BtnPc.Content = "Отключить на этом ПК";
-            BtnPc.Style = (Style)FindResource("DangerBtn");
-            _log.Sys($"Прокси включён на этом ПК → 127.0.0.1:{_proxy.BoundPort}. Трафик ПК пишется в лог с меткой PC.");
+            var delay = await _tunnel.MeasureDelayAsync(_lifetime.Token);
+            if (epoch != _connectionEpoch || _closing) return;
+            _delay = delay; _healthChecked = true;
+            if (delay is null) { ShowNotice("Туннель включён, но сервер не прошёл проверку связи. Проверьте конфигурацию; следующая проверка автоматически."); _log.Error("Tiho", "Проверка HTTPS через сервер: нет ответа."); }
+            else if (_config.ActiveProfile?.Protocol != "HTTP") Notice.Visibility = Visibility.Collapsed;
         }
-        else
-        {
-            _systemProxy.Restore();
-            _systemProxy.ForgetSnapshot();
-            _pcOn = false;
-            _config.PcProxyEnabled = false;
-            ConfigStore.Save(_config);
-            BtnPc.Content = "Включить на этом ПК";
-            BtnPc.Style = (Style)FindResource("PrimaryBtn");
-            _log.Sys("Прокси на этом ПК выключен.");
-        }
-        RefreshStatus();
-        await SyncHubAsync();
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or ObjectDisposedException)
+        { if (epoch == _connectionEpoch && !_closing) { _delay = null; _healthChecked = true; ShowNotice("Сервер не ответил на проверку связи. Повторная проверка автоматически."); } }
+        finally { _pingBusy = false; if (!_closing) RefreshUi(); }
     }
 
-    private async void ChkOptions_Changed(object sender, RoutedEventArgs e)
+    private async void BtnSave_Click(object sender, RoutedEventArgs e) => await RunUiAsync(async () =>
     {
-        if (_suppressOptionEvents || !IsLoaded)
-            return;
-        PersistEditor();
-        SaveConfig();
-        await SyncHubAsync();
+        var domains = TxtDomains.Text.Split(new[] { '\r', '\n', ',', ';' }, StringSplitOptions.RemoveEmptyEntries).Select(TunnelConfig.NormalizeDomain).Where(s => s.Length > 0).Distinct().ToList();
+        _config.DirectDomains = domains; _config.ExcludedApps = _excludedApps.ToList();
+        _config.AutoConnect = ChkAutoConnect.IsChecked == true; _config.StartWithWindows = ChkStartup.IsChecked == true;
+        _config.MinimizeToTray = ChkTray.IsChecked == true; _config.BypassRussia = ChkRussia.IsChecked == true;
+        ConfigStore.Save(_config); await TryStartupAsync();
+        if (_desired) await RestartAsync();
+        LblSettingsResult.Text = "Настройки применены."; _log.Sys("Настройки маршрутизации обновлены."); RefreshUi();
+    });
+
+    private async void BtnImport_Click(object sender, RoutedEventArgs e) => await RunUiAsync(async () =>
+    {
+        var dialog = new OpenFileDialog { Title = "Клиентская конфигурация AmneziaWG", Filter = "Конфигурация AmneziaWG (*.conf)|*.conf", Multiselect = false };
+        if (dialog.ShowDialog(this) != true) return;
+        var profile = AmneziaConfigImporter.Parse(await File.ReadAllTextAsync(dialog.FileName), Path.GetFileNameWithoutExtension(dialog.FileName));
+        _config.Profiles.Add(profile); _config.ActiveProfileId = profile.Id; ConfigStore.Save(_config); ReloadServers();
+        LblSettingsResult.Text = "AmneziaWG добавлен. Можно подключаться.";
+        if (_desired) await RestartAsync(); else if (_config.AutoConnect) { _desired = true; await ConnectAsync(); }
+    });
+
+    private async void BtnAddProxy_Click(object sender, RoutedEventArgs e) => await RunUiAsync(async () =>
+    {
+        var dialog = new AddServerWindow { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.Result is null) return;
+        _config.Profiles.Add(dialog.Result); _config.ActiveProfileId = dialog.Result.Id;
+        ConfigStore.Save(_config); ReloadServers(); if (_desired) await RestartAsync();
+        LblSettingsResult.Text = "Прокси добавлен.";
+    });
+
+    private async void BtnEditServer_Click(object sender, RoutedEventArgs e) => await RunUiAsync(async () =>
+    {
+        var profile = _config.ActiveProfile; if (profile is null) return;
+        if (profile.IsAmnezia) { LblSettingsResult.Text = "Для изменения AmneziaWG импортируйте обновлённый .conf и удалите старый профиль."; return; }
+        var dialog = new AddServerWindow(profile) { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.Result is null) return;
+        _config.Profiles[_config.Profiles.IndexOf(profile)] = dialog.Result;
+        ConfigStore.Save(_config); ReloadServers(); if (_desired) await RestartAsync();
+    });
+
+    private async void BtnRemoveServer_Click(object sender, RoutedEventArgs e) => await RunUiAsync(async () =>
+    {
+        var profile = _config.ActiveProfile; if (profile is null) return;
+        if (_desired) await DisconnectAsync();
+        _config.Profiles.Remove(profile); _config.ActiveProfileId = _config.Profiles.FirstOrDefault()?.Id ?? "";
+        ConfigStore.Save(_config); ReloadServers(); RefreshUi();
+    });
+
+    private async void CmbServers_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_loaded || CmbServers.SelectedItem is not ServerProfile selected || selected.Id == _config.ActiveProfileId) return;
+        await RunUiAsync(async () => { _config.ActiveProfileId = selected.Id; ConfigStore.Save(_config); if (_desired) await RestartAsync(); RefreshUi(); });
+    }
+
+    private void ReloadServers()
+    {
+        var loaded = _loaded; _loaded = false; CmbServers.ItemsSource = null; CmbServers.ItemsSource = _config.Profiles;
+        CmbServers.SelectedItem = _config.ActiveProfile; _loaded = loaded; RefreshUi();
+    }
+    private void BtnAddApp_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog { Title = "Программы, которые будут работать без VPN", Filter = "Программы Windows (*.exe)|*.exe", Multiselect = true };
+        if (dialog.ShowDialog(this) == true) foreach (var file in dialog.FileNames) if (!_excludedApps.Contains(file, StringComparer.OrdinalIgnoreCase)) _excludedApps.Add(file);
+    }
+    private void BtnRemoveApp_Click(object sender, RoutedEventArgs e) { if (LstExcludedApps.SelectedItem is string path) _excludedApps.Remove(path); }
+    private async void BtnUpdateRules_Click(object sender, RoutedEventArgs e)
+    {
+        BtnUpdateRules.IsEnabled = false;
+        try { await RoutingRules.UpdateAsync(_lifetime.Token); LblRules.Text = "Обновлено " + DateTime.Now.ToString("dd.MM.yyyy HH:mm"); _log.Sys("Списки российских доменов и IP обновлены."); if (_desired) await RestartAsync(); }
+        catch (Exception ex) { LblRules.Text = "Обновление не удалось; текущие списки сохранены."; _log.Error("Tiho", ex.Message); }
+        finally { BtnUpdateRules.IsEnabled = true; }
     }
 
     private void BtnClearLogs_Click(object sender, RoutedEventArgs e) => _log.Clear();
-
-    private void BtnOpenLogs_Click(object sender, RoutedEventArgs e)
+    private void LogFilter_Changed(object sender, RoutedEventArgs e)
     {
-        Directory.CreateDirectory(ConfigStore.LogsDir);
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = ConfigStore.LogsDir,
-            UseShellExecute = true
-        });
+        if (LstLogs is null) return;
+        CollectionViewSource.GetDefaultView(_log.All).Filter = ChkErrors.IsChecked == true ? item => item is LogEntry { Level: "ERROR" } : null;
     }
 
-    private void RefreshStatus(bool? testedOk = null)
+    private void RefreshUi()
     {
-        var hubOn = _proxy?.IsRunning == true;
-        DotHub.Fill = BrushOf(hubOn ? "#3ECF8E" : "#F0617D");
-        LblHub.Text = hubOn ? $"Хаб :{_proxy!.BoundPort}" : "Хаб выключен";
-
-        DotPc.Fill = BrushOf(_pcOn ? "#3ECF8E" : "#8A9BB5");
-        LblPc.Text = _pcOn ? "ПК через хаб" : "ПК напрямую";
-
-        var active = _config.ActiveProfile;
-        if (testedOk == true)
+        var on = _tunnel.IsRunning; var profile = _config.ActiveProfile;
+        if (!_transitioning)
         {
-            DotUp.Fill = BrushOf("#3ECF8E");
-            LblUp.Text = active is null ? "Upstream OK" : active.Name;
+            var noResponse = on && _healthChecked && _delay is null;
+            LblStatus.Text = noResponse ? "Сервер не отвечает" : on ? "Подключено" : _desired ? "Переподключение…" : "Отключено";
+            StatusDot.Fill = Brush(noResponse ? "#D4A23A" : on ? "#21856B" : _desired ? "#D4A23A" : "#A2A7B2");
+            BtnConnect.Content = _desired ? "Отключить" : "Подключить";
         }
-        else if (testedOk == false)
+        LblServer.Text = profile is null ? "Добавьте конфигурацию AmneziaWG в настройках" : $"{profile.Name} · {profile.Protocol}";
+        LblRoute.Text = "Весь ПК · " + (_config.BypassRussia ? "Россия напрямую" : "Россия через сервер") + (_config.ExcludedApps.Count > 0 ? $" · Исключений: {_config.ExcludedApps.Count}" : "");
+        LblPing.Text = on ? (_delay is int delay ? $"{delay} мс" : "—") : "—";
+        if (_usage is not null)
         {
-            DotUp.Fill = BrushOf("#F0617D");
-            LblUp.Text = "Ошибка сервера";
+            LblDuration.Text = UsageTracker.Duration(_usage.ConnectedTime); LblTotalDuration.Text = "Всего " + UsageTracker.Duration(_usage.TotalTime);
+            LblDownload.Text = "↓ " + (_usage.DownloadSpeed * 8 / 1_000_000).ToString("0.0", CultureInfo.CurrentCulture);
+            LblUpload.Text = "↑ " + UsageTracker.Megabits(_usage.UploadSpeed);
+            LblTraffic.Text = UsageTracker.Gigabytes(_usage.SessionUpload + _usage.SessionDownload);
+            LblLifetime.Text = "Всего " + UsageTracker.Gigabytes(_usage.TotalUpload + _usage.TotalDownload);
+            LblTransferred.Text = $"↓ {UsageTracker.Gigabytes(_usage.SessionDownload)}   ↑ {UsageTracker.Gigabytes(_usage.SessionUpload)}";
         }
-        else if (active is { IsVpn: true } && _vpn.IsRunning)
-        {
-            DotUp.Fill = BrushOf("#3ECF8E");
-            LblUp.Text = $"VPN {active.Name}";
-        }
-        else if (active is { IsConfigured: true, IsVpn: false })
-        {
-            DotUp.Fill = BrushOf("#F0B429");
-            LblUp.Text = $"{active.Protocol} {active.Host}:{active.Port}";
-        }
-        else if (active is { IsVpn: true })
-        {
-            DotUp.Fill = BrushOf("#F0B429");
-            LblUp.Text = $"VPN не подключён";
-        }
-        else
-        {
-            DotUp.Fill = BrushOf("#F0B429");
-            LblUp.Text = "Сервер не задан";
-        }
-
-        UpdateTrayTip();
+        if (!on) LblConnections.Text = "Соединений: 0";
+        if (_tray is not null) _tray.Text = on ? "Tiho · подключено" : _desired ? "Tiho · переподключение" : "Tiho · отключено";
     }
 
-    private void UpdateTrayTip()
+    private void Chart_SizeChanged(object sender, SizeChangedEventArgs e) => DrawChart();
+    private void DrawChart()
     {
-        if (_tray is null)
-            return;
-        var name = _config.ActiveProfile?.Name ?? "сервер не задан";
-        var text = $"Proxy Hub — {name}";
-        _tray.Text = text.Length <= 63 ? text : text[..63];
+        if (SpeedLine?.Parent is not Grid graph || graph.ActualWidth <= 0) return;
+        var values = _speeds.ToArray(); var max = Math.Max(1, values.DefaultIfEmpty().Max());
+        var points = new PointCollection(); var width = graph.ActualWidth; var height = graph.ActualHeight - 4;
+        for (var i = 0; i < 60; i++) { var index = i - (60 - values.Length); var value = index < 0 ? 0 : values[index]; points.Add(new Point(i * width / 59, height - value / max * height + 2)); }
+        SpeedLine.Points = points;
+    }
+    private void ShowNotice(string message) { LblNotice.Text = message; Notice.Visibility = Visibility.Visible; }
+    private static SolidColorBrush Brush(string hex) => new((Color)ColorConverter.ConvertFromString(hex));
+    private async Task RunUiAsync(Func<Task> action)
+    {
+        try { await action(); }
+        catch (OperationCanceledException) when (_closing) { }
+        catch (Exception ex) { _log.Error("Tiho", ex.Message); ShowNotice(ex.Message); LblSettingsResult.Text = ex.Message; }
     }
 
-    private void RefreshStats()
+    private void NetworkAvailabilityChanged(object? sender, NetworkAvailabilityEventArgs e)
     {
-        LblStats.Text =
-            $"запросы {Interlocked.Read(ref _stats.Requests)}   активных {Volatile.Read(ref _stats.Active)}   ошибки {Interlocked.Read(ref _stats.Errors)}   ↑ {HubStats.FormatBytes(Interlocked.Read(ref _stats.BytesUp))}   ↓ {HubStats.FormatBytes(Interlocked.Read(ref _stats.BytesDown))}";
-        LblLastError.Text = string.IsNullOrEmpty(_stats.LastError) ? "" : _stats.LastError;
+        if (_closing) return;
+        Dispatcher.BeginInvoke(async () => { if (!_closing && _desired && e.IsAvailable) { _log.Sys("Сеть доступна. Восстанавливаю подключение."); await RunUiAsync(RestartAsync); } });
     }
-
-    private static SolidColorBrush BrushOf(string hex)
-        => new((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
-}
-
-public sealed class LogLevelBrushConverter : IValueConverter
-{
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    private void InitTray()
     {
-        return (value as string) switch
-        {
-            "ERROR" => new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F0617D")!),
-            "BYPASS" => new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F0B429")!),
-            "SYS" => new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#4BA3F5")!),
-            _ => new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#D5DEEB")!)
-        };
+        var resource = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/Assets/app.ico"));
+        if (resource is not null) { using var stream = resource.Stream; using var icon = new System.Drawing.Icon(stream); _icon = (System.Drawing.Icon)icon.Clone(); }
+        _tray = new WinForms.NotifyIcon { Text = "Tiho", Icon = _icon ?? System.Drawing.SystemIcons.Application, Visible = true };
+        _tray.DoubleClick += (_, _) => RestoreFromTray();
+        var menu = new WinForms.ContextMenuStrip();
+        menu.Items.Add("Открыть Tiho", null, (_, _) => RestoreFromTray());
+        menu.Items.Add("Подключить / отключить", null, async (_, _) => { if (_desired) await RunUiAsync(DisconnectAsync); else { _desired = true; await RunUiAsync(() => ConnectAsync()); } });
+        menu.Items.Add("Выход", null, (_, _) => { _closing = true; Close(); });
+        _tray.ContextMenuStrip = menu;
     }
-
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
-        => throw new NotSupportedException();
+    private void RestoreFromTray() { Show(); WindowState = WindowState.Normal; Activate(); }
+    public void RequestExit() { _closing = true; Close(); }
+    private void Window_StateChanged(object sender, EventArgs e) { if (_loaded && WindowState == WindowState.Minimized && _config.MinimizeToTray) { Hide(); WindowState = WindowState.Normal; } }
+    private async void Window_Closing(object? sender, CancelEventArgs e)
+    {
+        if (_allowClose) return;
+        e.Cancel = true;
+        if (!_closing && _loaded && _config.MinimizeToTray) { Hide(); return; }
+        if (_closing && _lifetime.IsCancellationRequested) return;
+        _closing = true; _timer.Stop(); _desired = false; _connecting?.Cancel(); _lifetime.Cancel();
+        NetworkChange.NetworkAvailabilityChanged -= NetworkAvailabilityChanged;
+        try { await DisconnectAsync(); await _tunnel.DisposeAsync(); }
+        catch (Exception ex) { _log.Error("Tiho", ex.Message); }
+        finally { _tray?.Dispose(); _icon?.Dispose(); _allowClose = true; Close(); }
+    }
 }

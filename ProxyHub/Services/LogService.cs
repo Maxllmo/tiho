@@ -1,109 +1,28 @@
 using System.Collections.ObjectModel;
-using System.Windows;
+using System.Text.RegularExpressions;
 using ProxyHub.Models;
 
 namespace ProxyHub.Services;
 
+// Intentionally session-only: no log files, crash dumps or automatic exports.
 public sealed class LogService
 {
-    private const int MaxUiLines = 2500;
-    private readonly object _gate = new();
-    private readonly string _allFile;
-    private readonly string _errFile;
-
+    private const int MaxLines = 1500;
     public ObservableCollection<LogEntry> All { get; } = new();
-    public ObservableCollection<LogEntry> Errors { get; } = new();
-
-    public LogService()
-    {
-        Directory.CreateDirectory(ConfigStore.LogsDir);
-        var day = DateTime.Now.ToString("yyyy-MM-dd");
-        _allFile = Path.Combine(ConfigStore.LogsDir, $"hub-{day}.log");
-        _errFile = Path.Combine(ConfigStore.LogsDir, $"errors-{day}.log");
-    }
-
-    public IReadOnlyList<LogEntry> Snapshot(string? source = null)
-    {
-        List<LogEntry> Copy()
-        {
-            lock (_gate)
-            {
-                IEnumerable<LogEntry> query = All;
-                if (!string.IsNullOrWhiteSpace(source))
-                    query = query.Where(e => e.Source.Equals(source, StringComparison.OrdinalIgnoreCase));
-                return query.ToList();
-            }
-        }
-
-        var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.CheckAccess())
-            return Copy();
-        return dispatcher.Invoke(Copy);
-    }
-
     public void Info(string source, string message) => Add("INFO", source, message);
-    public void Bypass(string source, string message) => Add("BYPASS", source, message);
+    public void Bypass(string source, string message) => Add("DIRECT", source, message);
     public void Error(string source, string message) => Add("ERROR", source, message);
-    public void Sys(string message) => Add("SYS", "SYS", message);
-
-    public void Clear()
-    {
-        RunOnUi(() =>
-        {
-            All.Clear();
-            Errors.Clear();
-        });
-    }
-
+    public void Sys(string message) => Add("SYS", "Tiho", message);
+    public void Clear() => OnUi(All.Clear);
     private void Add(string level, string source, string message)
     {
-        var entry = new LogEntry
-        {
-            Time = DateTime.Now,
-            Level = level,
-            Source = source,
-            Message = message
-        };
-
-        var line = entry.Display + Environment.NewLine;
-        try
-        {
-            File.AppendAllText(_allFile, line);
-            if (level == "ERROR")
-                File.AppendAllText(_errFile, line);
-        }
-        catch
-        {
-            // ignored
-        }
-
-        RunOnUi(() =>
-        {
-            lock (_gate)
-            {
-                All.Add(entry);
-                Trim(All);
-                if (level == "ERROR")
-                {
-                    Errors.Add(entry);
-                    Trim(Errors);
-                }
-            }
-        });
+        message = Regex.Replace(message, @"(?i)(private_?key|preshared_?key|header_?protection_?key|password)\s*[=:]\s*[^\s,;]+", "$1=[скрыто]");
+        var entry = new LogEntry { Level = level, Source = source, Message = message };
+        OnUi(() => { All.Add(entry); while (All.Count > MaxLines) All.RemoveAt(0); });
     }
-
-    private static void Trim(ObservableCollection<LogEntry> list)
-    {
-        while (list.Count > MaxUiLines)
-            list.RemoveAt(0);
-    }
-
-    private static void RunOnUi(Action action)
+    private static void OnUi(Action action)
     {
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.CheckAccess())
-            action();
-        else
-            dispatcher.BeginInvoke(action);
+        if (dispatcher is null || dispatcher.CheckAccess()) action(); else dispatcher.BeginInvoke(action);
     }
 }

@@ -9,21 +9,3 @@ public sealed class LogEntry
 
     public string Display => $"[{Time:HH:mm:ss}]  {Source,-4}  {Message}";
 }
-
-public sealed class HubStats
-{
-    public long Requests;
-    public long Errors;
-    public long BytesUp;
-    public long BytesDown;
-    public int Active;
-    public string LastError = "";
-
-    public static string FormatBytes(long bytes)
-    {
-        if (bytes < 1024) return $"{bytes} B";
-        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:0.0} KB";
-        if (bytes < 1024L * 1024 * 1024) return $"{bytes / 1024.0 / 1024.0:0.0} MB";
-        return $"{bytes / 1024.0 / 1024.0 / 1024.0:0.00} GB";
-    }
-}

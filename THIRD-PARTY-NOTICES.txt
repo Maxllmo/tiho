@@ -1,0 +1,31 @@
+Tiho 2.0.0
+
+AmneziaWG gateway: official github.com/amnezia-vpn/amneziawg-go/v3,
+tag v3.1.20260828, MIT. Copyright 2017-2025 WireGuard LLC.
+Gateway source, dependency versions and checks are included in awg-core/.
+Source: https://github.com/amnezia-vpn/amneziawg-go/tree/v3.1.20260828
+
+sing-box 1.14.4: unmodified upstream Windows distribution, GPL-3.0-or-later,
+Copyright 2022 nekohasekai. This application is not affiliated with SagerNet.
+Exact release: https://github.com/SagerNet/sing-box/releases/tag/v1.14.4
+Corresponding source: https://github.com/SagerNet/sing-box/archive/refs/tags/v1.14.4.tar.gz
+Build/dependency metadata: https://github.com/SagerNet/sing-box/blob/v1.14.4/go.mod
+The corresponding source is available beside the release as well as at this URL.
+
+gVisor networking stack: Apache-2.0, Google LLC and contributors.
+Pinned version: 1f7806d17489 (see awg-core/go.mod and go.sum).
+Source: https://github.com/google/gvisor/tree/1f7806d17489
+
+.NET 8 runtime and Windows Desktop: Microsoft and .NET contributors, MIT.
+Source: https://github.com/dotnet/runtime/tree/v8.0.33
+Desktop source: https://github.com/dotnet/wpf/tree/v8.0.33
+
+Russian-domain data: MetaCubeX/meta-rules-dat, category-ru, retrieved 2026-11-05.
+https://github.com/MetaCubeX/meta-rules-dat/tree/meta/geo/geosite
+Russian IP data: Loyalsoldier/geoip, release/text/ru.txt, retrieved 2026-11-05.
+https://github.com/Loyalsoldier/geoip
+Data providers and their upstream attribution are retained in their source repositories.
+
+Other Go dependency copyright and license notices are included in licenses/.
+Pinned dependency sources are available through the versions in awg-core/go.mod
+and their integrity hashes in go.sum. Upstream notices accompany the source archive.

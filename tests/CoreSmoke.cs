@@ -69,7 +69,7 @@ internal static class CoreSmoke
         {
             foreach (var mode in new[] { "AmneziaWG", "HTTP", "SOCKS5" })
             {
-                var profile = new ServerProfile { Name = "Runtime test", Protocol = mode, Host = "127.0.0.1", Port = 10800 };
+                var profile = new ServerProfile { Name = "Runtime test", Protocol = mode, Host = "127.0.0.1", Port = 10800, WireGuardConfig = "[Interface]\nAddress = 10.77.0.2/32\n[Peer]\n" };
                 var config = new AppConfig { Profiles = new() { profile }, ActiveProfileId = profile.Id, DirectDomains = new() { "direct.tiho.test" } };
                 var apiPort = FreePort(); var mixedPort = FreePort();
                 while (mixedPort == apiPort) mixedPort = FreePort();

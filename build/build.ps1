@@ -39,6 +39,8 @@ try {
     dotnet run --project tests/Tiho.Checks.csproj -c Release
     if ($LASTEXITCODE) { throw 'Core startup/DNS smoke test failed; refusing to package this build.' }
 } finally { $env:TIHO_TEST_CORE = $PreviousTestCore }
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$Root/tests/GetConfig.Checks.ps1"
+if ($LASTEXITCODE) { throw 'Profile download regression checks failed; refusing to package this build.' }
 & $Nsis "$Root/build/Tiho.nsi"
 if ($LASTEXITCODE) { throw 'Installer build failed' }
 & "$PSScriptRoot/package-release.ps1"

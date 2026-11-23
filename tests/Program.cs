@@ -23,6 +23,13 @@ Check(built["inbounds"]![0]!["route_exclude_address"]!.ToJsonString().Contains("
 Check(TunnelConfig.NormalizeDomain("https://пример.рф/path") == "xn--e1afmkfd.xn--p1ai", "IDN and URL domain normalization");
 var outputDir = Path.GetFullPath("work"); Directory.CreateDirectory(outputDir);
 File.WriteAllText(Path.Combine(outputDir, "test-tun-config.json"), built.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+profile.WireGuardConfig = conf.Replace("10.77.0.2/32", "fd00::2/128");
+var ipv6Only = TunnelConfig.Build(config, 10800, 19090, "test-only-token", rulesDir, new[] { "127.0.0.1" });
+Check(ipv6Only["dns"]!["strategy"]!.GetValue<string>() == "ipv6_only"
+    && ipv6Only["dns"]!["servers"]![1]!["server"]!.GetValue<string>().Contains(':'), "IPv6-only profiles use an IPv6 protected resolver");
+File.WriteAllText(Path.Combine(outputDir, "test-ipv6-config.json"), ipv6Only.ToJsonString());
+profile.WireGuardConfig = conf;
+
 config.BypassRussia = false;
 var full = TunnelConfig.Build(config, 10800, 19090, "test-only-token", rulesDir, new[] { "127.0.0.1" });
 Check(!full["route"]!["rules"]!.AsArray().Any(r => r?["rule_set"] is not null), "Russia bypass can be disabled while preserving app exceptions");
@@ -42,5 +49,9 @@ usage.Begin(); usage.Sample(10, 20); usage.End();
 Check(new UsageTracker(usagePath).TotalDownload == 360, "A new session adds to lifetime totals");
 Check(UsageTracker.Duration(TimeSpan.FromHours(27)) == "1 д 03:00:00", "Duration does not wrap after 24 hours");
 Check(UsageTracker.Gigabytes(1_000_000_000).StartsWith("1"), "Decimal gigabytes use one billion bytes");
-if (Environment.GetEnvironmentVariable("TIHO_TEST_CORE") is { Length: > 0 } core) await CoreSmoke.RunAsync(core);
+if (Environment.GetEnvironmentVariable("TIHO_TEST_CORE") is { Length: > 0 } core)
+{
+    await CoreSmoke.RunAsync(core);
+    await TunnelDnsSmoke.RunAsync(core);
+}
 Console.WriteLine("All Tiho checks passed.");

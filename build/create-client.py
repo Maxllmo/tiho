@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import secrets
 
 CONFIG_PATH = "/opt/amnezia/awg/awg0.conf"
 AWG_FIELDS = [
@@ -108,9 +109,23 @@ class Docker:
     def __init__(self, container):
         self.container = container
 
+    @classmethod
+    def discover(cls):
+        result = subprocess.run(["docker", "ps", "--format", "{{.Names}}"], text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+        if result.returncode:
+            raise RuntimeError("Не удалось получить список контейнеров. Проверьте Docker на сервере.")
+        names = [name for name in result.stdout.splitlines() if re.fullmatch(r"amnezia-awg[\w.-]*", name)]
+        if len(names) != 1:
+            raise RuntimeError("Не найден единственный работающий контейнер AmneziaWG. Укажите его через --container ИМЯ.")
+        return cls(names[0])
+
     def run(self, arguments, input_text=None):
         command = ["docker", "exec"] + (["-i"] if input_text is not None else []) + [self.container] + arguments
-        result = subprocess.run(command, input=input_text, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            result = subprocess.run(command, input=input_text, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("Контейнер AmneziaWG не ответил за 30 секунд. Повторите команду.") from None
         if result.returncode:
             # CLI errors can contain configuration data. Do not echo stdout/stderr or key arguments.
             raise RuntimeError("Команда в контейнере не выполнена. Проверьте имя контейнера и наличие интерфейса awg0.")
@@ -125,9 +140,12 @@ class Docker:
     def allowed_ips(self):
         return self.run(["awg", "show", "awg0", "allowed-ips"])
 
+    def client_public_key(self, private):
+        return self.run(["awg", "pubkey"], private + "\n")
+
     def keys(self):
         private = self.run(["awg", "genkey"])
-        public = self.run(["awg", "pubkey"], private + "\n")
+        public = self.client_public_key(private)
         psk = self.run(["awg", "genpsk"])
         return private, public, psk
 
@@ -147,29 +165,58 @@ def secure_write(path, text):
         stream.write(text)
 
 
-def create_client(api, endpoint, name, directory, check=False):
+def existing_client(api, output, interface, server_public, endpoint, peers, runtime):
+    client_interface, client_peers = parse_config(output.read_text(encoding="utf-8-sig"))
+    if len(client_peers) != 1:
+        raise ValueError("Сохранённый профиль повреждён. Выберите другое имя устройства.")
+    peer = client_peers[0]
+    private, psk = client_interface.get("privatekey", ""), peer.get("presharedkey", "")
+    if not valid_key(private) or not valid_key(psk) or peer.get("publickey") != server_public:
+        raise ValueError("Сохранённый профиль не соответствует серверу. Выберите другое имя устройства.")
+    address = client_interface.get("address", "")
+    try:
+        ip = ipaddress.ip_interface(address)
+        if ip.version != 4 or ip.network.prefixlen != 32:
+            raise ValueError()
+    except ValueError:
+        raise ValueError("В сохранённом профиле некорректный адрес. Выберите другое имя устройства.") from None
+    public = api.client_public_key(private)
+    persisted = any(p.get("publickey") == public and p.get("presharedkey") == psk
+                    and p.get("allowedips") == address for p in peers)
+    active = any(line.split(None, 1) == [public, address] for line in runtime.splitlines())
+    expected = render_client(interface, address, endpoint, private, server_public, psk)
+    if not valid_key(public) or not persisted or not active or output.read_text(encoding="utf-8-sig") != expected:
+        raise ValueError("Профиль или параметры сервера изменились. Выберите другое имя устройства; старые клиенты не изменены.")
+    output.chmod(0o600)
+    return output
+
+
+def create_client(api, endpoint, name, directory, check=False, reuse=False):
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
         raise ValueError("Имя устройства: 1–40 латинских букв, цифр, дефисов или подчёркиваний.")
     original = api.read_config()
     interface, peers = parse_config(original)
-    address = choose_address(interface, peers, api.allowed_ips())
+    runtime = api.allowed_ips()
     server_public = api.public_key()
     if not valid_key(server_public):
         raise ValueError("Не удалось получить публичный ключ сервера.")
+    directory = Path(directory)
+    output = directory / (name + ".conf")
+    if not check and output.exists():
+        if reuse:
+            return existing_client(api, output, interface, server_public, endpoint, peers, runtime)
+        raise ValueError("Файл уже существует: " + str(output) + ". Скопируйте его или выберите другое имя устройства.")
+    address = choose_address(interface, peers, runtime)
     if check:
         render_client(interface, address, endpoint, server_public, server_public, server_public)
         return address
-    directory = Path(directory)
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     directory.chmod(0o700)
-    output = directory / (name + ".conf")
-    if output.exists():
-        raise ValueError("Файл уже существует: " + str(output) + ". Скопируйте его или выберите другое имя устройства.")
     private, public, psk = api.keys()
     if not valid_key(public):
         raise ValueError("Не удалось создать публичный ключ клиента.")
     client = render_client(interface, address, endpoint, private, server_public, psk)
-    temporary = directory / (name + ".conf.tmp")
+    temporary = directory / (name + ".conf." + secrets.token_hex(8) + ".tmp")
     secure_write(temporary, client)
     backups = directory / "backups"
     backups.mkdir(mode=0o700, exist_ok=True)
@@ -204,7 +251,8 @@ def main():
     parser = argparse.ArgumentParser(description="Создать отдельный клиентский .conf на существующем сервере AmneziaWG.")
     parser.add_argument("--endpoint", required=True, help="Публичный IP или имя сервера, без порта")
     parser.add_argument("--name", default="Tiho-PC")
-    parser.add_argument("--container", default="amnezia-awg2")
+    parser.add_argument("--container", help="Имя контейнера; по умолчанию определяется автоматически")
+    parser.add_argument("--reuse", action="store_true", help="Повторно получить существующий профиль после проверки его актуальности")
     parser.add_argument("--check", action="store_true", help="Только проверить сервер, ничего не менять")
     args = parser.parse_args()
     if os.geteuid() != 0:
@@ -213,10 +261,13 @@ def main():
         descriptor = os.open("/run/lock/tiho-create-client.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
         with os.fdopen(descriptor, "w") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
-            result = create_client(Docker(args.container), args.endpoint, args.name, Path("/root/tiho-clients"), args.check)
+            api = Docker(args.container) if args.container else Docker.discover()
+            result = create_client(api, args.endpoint, args.name, Path("/root/tiho-clients"), args.check, args.reuse)
         print("Проверка пройдена. Свободный адрес: " + result if args.check else "Конфигурация создана: " + str(result))
         if not args.check:
             print("VPN не перезапускался. Скопируйте только этот клиентский .conf на свой ПК. Ключи в чат не отправляйте.")
+    except subprocess.TimeoutExpired:
+        parser.exit(1, "Docker не ответил за 30 секунд. Повторите команду.\n")
     except (ValueError, RuntimeError, OSError) as error:
         parser.exit(1, "Ошибка: " + str(error) + "\n")
 

@@ -1,24 +1,24 @@
 {
-  "archive_sha256": "5495cccbcafdc4f13a4ad841b4f2017a049ed82290e4fbd2fd520d9bcde66018",
-  "installer_sha256": "fec0b499679117972683429e4519db097c16b97c0aeb53be6efc4c6cc30391b7",
-  "format": "split-zip",
   "parts": [
     {
-      "sha256": "26a6dd6eb5cfaa6516f06a3e74c3936271eea2dce3dde8eb312a7ef6a2954d19",
+      "size": 94371840,
       "name": "Tiho-Windows.zip.001",
-      "size": 94371840
+      "sha256": "22d5ce57af29e09203fd0e89af1982066367afd83de270ca368bfda025cbf810"
     },
     {
-      "sha256": "d03c141ea38ce9003839924f91f7e7a32a7d7f3ce14bf4009c68e4a3692fcdcc",
+      "size": 94371840,
       "name": "Tiho-Windows.zip.002",
-      "size": 94371840
+      "sha256": "e765c5cd67b3cd9642c49f77bcfb7f8f0fa153f8a3455ec022409803a9970d1e"
     },
     {
-      "sha256": "5f74f1ec0f9aad863080156b04c1090bd30715b53810064a169fbdcd257307ad",
+      "size": 10602004,
       "name": "Tiho-Windows.zip.003",
-      "size": 10598241
+      "sha256": "a46d40f8416864e5679ab5e5624a3f7d187ca14b22cb39d58df796abb59d83b1"
     }
   ],
-  "version": "2.1.1",
-  "archive_name": "Tiho-Windows.zip"
+  "archive_sha256": "a34cb74992c9801e41736e3f1fd8c58f32d158dcd2f3252350a7feb9eefdd4db",
+  "version": "2.1.2",
+  "archive_name": "Tiho-Windows.zip",
+  "format": "split-zip",
+  "installer_sha256": "f1c15bffff47ca213d199966e0625cc8fc2806ca233788cf5ad8efb1338b7796"
 }

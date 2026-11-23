@@ -11,7 +11,7 @@
      <RadioButton x:Name="NavSettings" GroupName="Page" Style="{StaticResource Navigation}" Tag="1" Click="Navigation_Click"><StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE713;" FontSize="16" Margin="0,0,11,0" VerticalAlignment="Center"/><TextBlock Text="Настройки"/></StackPanel></RadioButton>
      <RadioButton x:Name="NavLogs" GroupName="Page" Style="{StaticResource Navigation}" Tag="2" Click="Navigation_Click"><StackPanel Orientation="Horizontal"><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8A5;" FontSize="16" Margin="0,0,11,0" VerticalAlignment="Center"/><TextBlock Text="Логи"/></StackPanel></RadioButton>
     </StackPanel>
-    <StackPanel Grid.Row="2" Margin="9,0,0,0"><TextBlock Text="AmneziaWG" Style="{StaticResource Muted}"/><TextBlock Text="Tiho 2.1.1" Foreground="#596577" FontSize="11" Margin="0,5,0,0"/></StackPanel>
+    <StackPanel Grid.Row="2" Margin="9,0,0,0"><TextBlock Text="AmneziaWG" Style="{StaticResource Muted}"/><TextBlock Text="Tiho 2.1.2" Foreground="#596577" FontSize="11" Margin="0,5,0,0"/></StackPanel>
    </Grid>
   </Border>
   <Grid Grid.Column="1" Margin="28,24,28,22">

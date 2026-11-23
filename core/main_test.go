@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -150,13 +151,18 @@ func TestTunnelTCPAndUDP(t *testing.T) {
 		if response[1] != 0 {
 			t.Fatalf("SOCKS connect failed: %v", response)
 		}
-		message := []byte("Tiho through a real AmneziaWG encrypted tunnel")
-		c.Write(message)
+		// Exercise a response spanning many MTU-sized packets, as an HTTPS page does.
+		message := bytes.Repeat([]byte("Tiho through a real AmneziaWG encrypted tunnel"), 8192)
+		written := make(chan error, 1)
+		go func() { _, err := c.Write(message); written <- err }()
 		got := make([]byte, len(message))
 		if _, err := io.ReadFull(c, got); err != nil {
 			t.Fatal(err)
 		}
-		if string(got) != string(message) {
+		if err := <-written; err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, message) {
 			t.Fatal("TCP payload mismatch")
 		}
 	})
@@ -176,7 +182,7 @@ func TestTunnelTCPAndUDP(t *testing.T) {
 		}
 		defer client.Close()
 		client.SetDeadline(time.Now().Add(15 * time.Second))
-		message := []byte("game UDP payload")
+		message := bytes.Repeat([]byte("game UDP payload"), 75)
 		packet := append([]byte{0, 0, 0, 1, 10, 77, 0, 1, byte(18081 >> 8), byte(18081 & 255)}, message...)
 		client.Write(packet)
 		buffer := make([]byte, 2048)

@@ -10,6 +10,14 @@ public static class TunnelConfig
         string rulesDir, IEnumerable<string> endpointAddresses, string directDnsServer = "77.88.8.8")
     {
         var profile = config.ActiveProfile ?? throw new InvalidOperationException("Добавьте сервер.");
+        var tunnelStrategy = "prefer_ipv4";
+        if (profile.IsAmnezia)
+        {
+            var addresses = AmneziaConfigImporter.GetClientAddresses(profile.WireGuardConfig);
+            var hasV4 = addresses.Any(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
+            var hasV6 = addresses.Any(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6);
+            tunnelStrategy = hasV4 && hasV6 ? "prefer_ipv4" : hasV6 ? "ipv6_only" : "ipv4_only";
+        }
         var outbound = profile.IsAmnezia
             ? new JsonObject { ["type"] = "socks", ["tag"] = "proxy", ["server"] = "127.0.0.1", ["server_port"] = socksPort, ["version"] = "5" }
             : OutboundConfig.Build(profile);
@@ -29,11 +37,12 @@ public static class TunnelConfig
         rules.Add(DirectRule("domain_suffix", localDomains));
         if (domains.Length > 0) rules.Add(DirectRule("domain_suffix", domains));
         if (config.BypassRussia)
-        {
             rules.Add(new JsonObject { ["rule_set"] = new JsonArray("ru-domains"), ["action"] = "route", ["outbound"] = "direct" });
-            rules.Add(new JsonObject { ["action"] = "resolve", ["strategy"] = "prefer_ipv4" });
+        // Resolve tunnel destinations even in full-tunnel mode. Otherwise SOCKS
+        // delegates names to the gateway's imported DNS, bypassing our DNS policy.
+        rules.Add(new JsonObject { ["action"] = "resolve", ["server"] = "dns-tunnel", ["strategy"] = tunnelStrategy });
+        if (config.BypassRussia)
             rules.Add(new JsonObject { ["rule_set"] = new JsonArray("ru-ip"), ["action"] = "route", ["outbound"] = "direct" });
-        }
         // Squid cannot carry UDP. Fail explicitly instead of silently leaking it to a direct route.
         if (profile.Protocol.Equals("HTTP", StringComparison.OrdinalIgnoreCase))
             rules.Add(new JsonObject { ["network"] = "udp", ["action"] = "reject" });
@@ -56,11 +65,19 @@ public static class TunnelConfig
                     // An omitted detour uses the physical-network dialer. sing-box 1.14
                     // rejects a detour to an otherwise empty direct outbound at runtime.
                     new JsonObject { ["type"] = "udp", ["tag"] = "dns-direct", ["server"] = directDnsServer, ["server_port"] = 53 },
-                    new JsonObject { ["type"] = "udp", ["tag"] = "dns-tunnel", ["server"] = "1.1.1.1", ["server_port"] = 53, ["detour"] = "proxy" }
+                    // HTTPS also works through HTTP proxies and does not depend on UDP/53.
+                    // A literal address avoids bootstrap DNS and recursive proxy resolution.
+                    new JsonObject
+                    {
+                        ["type"] = "https", ["tag"] = "dns-tunnel",
+                        ["server"] = tunnelStrategy == "ipv6_only" ? "2606:4700:4700::1111" : "1.1.1.1",
+                        ["server_port"] = 443, ["path"] = "/dns-query", ["detour"] = "proxy",
+                        ["tls"] = new JsonObject { ["enabled"] = true, ["server_name"] = "cloudflare-dns.com" }
+                    }
                 },
                 ["rules"] = dnsRules,
-                ["final"] = profile.Protocol.Equals("HTTP", StringComparison.OrdinalIgnoreCase) ? "dns-direct" : "dns-tunnel",
-                ["strategy"] = "prefer_ipv4", ["reverse_mapping"] = true
+                ["final"] = "dns-tunnel",
+                ["strategy"] = tunnelStrategy, ["reverse_mapping"] = true
             },
             ["inbounds"] = new JsonArray
             {
@@ -76,7 +93,9 @@ public static class TunnelConfig
             ["route"] = new JsonObject
             {
                 ["auto_detect_interface"] = true, ["find_process"] = true,
-                ["default_domain_resolver"] = "dns-direct", ["final"] = "proxy", ["rules"] = rules,
+                // Physical DNS is only for direct destinations and proxy bootstrap.
+                ["default_domain_resolver"] = new JsonObject { ["server"] = "dns-direct", ["strategy"] = "prefer_ipv4" },
+                ["final"] = "proxy", ["rules"] = rules,
                 ["rule_set"] = new JsonArray
                 {
                     LocalRuleSet("ru-domains", Path.Combine(rulesDir, "ru-domains.json")),
@@ -98,7 +117,7 @@ public static class TunnelConfig
     private static JsonObject DirectRule(string field, IEnumerable<string> values) => new()
     { [field] = Strings(values), ["action"] = "route", ["outbound"] = "direct" };
     private static JsonObject DnsRule(string field, IEnumerable<string> values) => new()
-    { [field] = Strings(values), ["action"] = "route", ["server"] = "dns-direct" };
+    { [field] = Strings(values), ["action"] = "route", ["server"] = "dns-direct", ["strategy"] = "prefer_ipv4" };
     private static JsonArray Strings(IEnumerable<string> values) => new(values.Select(v => (JsonNode?)JsonValue.Create(v)).ToArray());
     private static bool IsAppPath(string path) => Path.IsPathRooted(path) || (path.Length > 2 && char.IsLetter(path[0]) && path[1] == ':' && (path[2] == '\\' || path[2] == '/')) || path.StartsWith(@"\\");
 

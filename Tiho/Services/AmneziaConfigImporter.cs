@@ -7,6 +7,35 @@ public static class AmneziaConfigImporter
 {
     public static ServerProfile Parse(string text, string name)
     {
+        var sections = ReadSections(text);
+        if (!sections.TryGetValue("[Interface]", out var iface) || !sections.TryGetValue("[Peer]", out var peer))
+            throw new InvalidOperationException("Нужен клиентский .conf AmneziaWG, содержащий [Interface] и [Peer].");
+        RequireKey(iface, "PrivateKey"); RequireKey(peer, "PublicKey");
+        if (peer.TryGetValue("PresharedKey", out var psk) && psk.Length > 0) RequireKey(peer, "PresharedKey");
+        if (iface.TryGetValue("HeaderProtectionKey", out var hpk) && hpk.Length > 0) RequireKey(iface, "HeaderProtectionKey");
+        if (!iface.TryGetValue("Address", out var addresses) || addresses.Split(',').Any(s => !ValidClientAddress(s)))
+            throw new InvalidOperationException("В .conf отсутствует корректный Address клиента.");
+        if (!peer.TryGetValue("Endpoint", out var endpoint) || !Uri.TryCreate("udp://" + endpoint, UriKind.Absolute, out var uri) || uri.Port is <= 0 or > 65535 || string.IsNullOrWhiteSpace(uri.Host))
+            throw new InvalidOperationException("В .conf отсутствует Endpoint сервера с портом.");
+        return new ServerProfile
+        {
+            Name = string.IsNullOrWhiteSpace(name) ? "AmneziaWG" : name, Kind = "vpn", Protocol = "AmneziaWG",
+            Host = uri.Host.Trim('[', ']'), Port = uri.Port, WireGuardConfig = text
+        };
+    }
+
+    // Read from the existing encrypted profile too, so older imports need no migration.
+    public static IReadOnlyList<IPAddress> GetClientAddresses(string text)
+    {
+        var sections = ReadSections(text);
+        if (!sections.TryGetValue("[Interface]", out var iface) || !iface.TryGetValue("Address", out var addresses)
+            || addresses.Split(',').Any(s => !ValidClientAddress(s)))
+            throw new InvalidOperationException("В .conf отсутствует корректный Address клиента.");
+        return addresses.Split(',').Select(s => IPAddress.Parse(s.Trim().Split('/')[0])).ToArray();
+    }
+
+    private static Dictionary<string, Dictionary<string, string>> ReadSections(string text)
+    {
         if (text.Length > 1024 * 1024) throw new InvalidOperationException("Файл конфигурации слишком большой.");
         var sections = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, string>? current = null;
@@ -24,20 +53,7 @@ public static class AmneziaConfigImporter
             if (pair.Length != 2 || current is null) throw new InvalidOperationException("Некорректный формат .conf.");
             current[pair[0].Trim()] = pair[1].Trim();
         }
-        if (!sections.TryGetValue("[Interface]", out var iface) || !sections.TryGetValue("[Peer]", out var peer))
-            throw new InvalidOperationException("Нужен клиентский .conf AmneziaWG, содержащий [Interface] и [Peer].");
-        RequireKey(iface, "PrivateKey"); RequireKey(peer, "PublicKey");
-        if (peer.TryGetValue("PresharedKey", out var psk) && psk.Length > 0) RequireKey(peer, "PresharedKey");
-        if (iface.TryGetValue("HeaderProtectionKey", out var hpk) && hpk.Length > 0) RequireKey(iface, "HeaderProtectionKey");
-        if (!iface.TryGetValue("Address", out var addresses) || addresses.Split(',').Any(s => !ValidClientAddress(s)))
-            throw new InvalidOperationException("В .conf отсутствует корректный Address клиента.");
-        if (!peer.TryGetValue("Endpoint", out var endpoint) || !Uri.TryCreate("udp://" + endpoint, UriKind.Absolute, out var uri) || uri.Port is <= 0 or > 65535 || string.IsNullOrWhiteSpace(uri.Host))
-            throw new InvalidOperationException("В .conf отсутствует Endpoint сервера с портом.");
-        return new ServerProfile
-        {
-            Name = string.IsNullOrWhiteSpace(name) ? "AmneziaWG" : name, Kind = "vpn", Protocol = "AmneziaWG",
-            Host = uri.Host.Trim('[', ']'), Port = uri.Port, WireGuardConfig = text
-        };
+        return sections;
     }
 
     private static void RequireKey(Dictionary<string, string> section, string name)
